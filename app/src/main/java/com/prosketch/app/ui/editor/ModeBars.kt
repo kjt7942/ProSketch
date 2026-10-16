@@ -188,11 +188,27 @@ private fun Modifier.verticalScrollCompat(): Modifier = this.verticalScroll(reme
 fun AdjustBar(ed: Editor, modifier: Modifier = Modifier) {
     val at = ed.adjustTool
     val t = at.type ?: return
-    BottomBar(modifier.widthIn(max = 720.dp)) {
+    at.version.let { }
+    if (t == AdjustmentType.RECOLOR) LaunchedEffect(ed.color) { at.colorChanged() }
+    BottomBar(modifier.widthIn(max = 760.dp)) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(t.label, color = UI.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
                 if (at.computing) Text("계산 중…", color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
+                if (t.supportsPencil) {
+                    Segmented(listOf("레이어", "펜슬"), if (at.pencil) 1 else 0, Modifier.width(150.dp)) { at.pencil = it == 1; ed.invalidate() }
+                    Spacer(Modifier.width(6.dp))
+                }
+                // hold to see the layer without the adjustment
+                Box(Modifier.clip(RoundedCornerShape(8.dp)).background(if (at.showOriginal) UI.accent else UI.panel2)
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown(); at.showOriginal = true; ed.invalidate()
+                            do { val ev = awaitPointerEvent() } while (ev.changes.any { it.pressed })
+                            at.showOriginal = false; ed.invalidate()
+                        }
+                    }.padding(horizontal = 12.dp, vertical = 8.dp)) { Text("원본", color = UI.text, fontSize = 13.sp) }
+                Spacer(Modifier.width(6.dp))
                 TextBtn("초기화") { at.reset() }
                 Spacer(Modifier.width(6.dp))
                 TextBtn("취소") { at.cancel() }
@@ -202,7 +218,6 @@ fun AdjustBar(ed: Editor, modifier: Modifier = Modifier) {
             when (t) {
                 AdjustmentType.CURVES -> CurvesEditor(ed)
                 AdjustmentType.COLOR_BALANCE -> {
-                    at.version.let { }
                     Segmented(listOf("그림자", "중간톤", "하이라이트"), at.balanceTone, Modifier.fillMaxWidth().padding(vertical = 6.dp)) { at.balanceTone = it }
                     val v = at.balance.v[at.balanceTone]
                     t.params.forEachIndexed { i, p ->
@@ -222,14 +237,41 @@ fun AdjustBar(ed: Editor, modifier: Modifier = Modifier) {
                         }
                     }
                 }
+                AdjustmentType.CLONE -> {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextBtn(if (at.cloneLocked) "소스 고정됨" else "소스 고정", at.cloneLocked) { at.cloneLocked = !at.cloneLocked }
+                        Text("원을 끌어 복제할 위치를 정하고 그 밖을 칠합니다. 브러시·크기·불투명도는 사이드바와 브러시 라이브러리를 따릅니다.", color = UI.text2, fontSize = 11.sp)
+                    }
+                }
+                AdjustmentType.RECOLOR -> {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                        Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(Color(ed.color)).border(1.dp, Color.White, RoundedCornerShape(6.dp)))
+                        Text("새 색상: 현재 색상 (색상 버튼에서 바꾸면 바로 반영)", color = UI.text2, fontSize = 11.sp)
+                    }
+                }
                 else -> {}
             }
-            t.params.takeIf { t != AdjustmentType.COLOR_BALANCE }?.forEach { p ->
+            if (t != AdjustmentType.COLOR_BALANCE) t.params.filter { it.visible(at.params) }.forEach { p ->
                 val v = at.params[p.key] ?: p.default
-                if (p.unit.isEmpty() && p.max <= 1f) SwitchRow(p.label, v >= 0.5f) { at.setParam(p.key, if (it) 1f else 0f) }
-                else LabeledSlider(p.label, v, p.min..p.max, at.formatParam(p, v), { at.setParam(p.key, it) })
+                when {
+                    p.choices != null -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 3.dp)) {
+                        Text(p.label, color = UI.text, fontSize = 13.sp, modifier = Modifier.width(80.dp))
+                        Segmented(p.choices, v.roundToInt(), Modifier.weight(1f)) { at.setParam(p.key, it.toFloat()) }
+                    }
+                    p.isSwitch -> SwitchRow(p.label, v >= 0.5f) { at.setParam(p.key, if (it) 1f else 0f) }
+                    else -> LabeledSlider(p.label, v, p.min..p.max, at.formatParam(p, v), { at.setParam(p.key, it) })
+                }
             }
-            if (t.params.isNotEmpty() && t != AdjustmentType.COLOR_BALANCE) Text("캔버스를 손가락으로 좌우로 밀어 '${t.params[0].label}' 조절", color = UI.text2, fontSize = 11.sp)
+            val hint = when {
+                at.pencil -> "펜슬: 칠한 곳에만 효과가 적용됩니다 · 지우개로 되돌립니다"
+                t.hasFocal && at.focal() != null -> "원을 끌어 초점 위치를 옮기고, 캔버스를 좌우로 밀어 '${at.primaryParam()?.label}' 조절"
+                at.usesDragVector() -> "캔버스를 원하는 방향으로 끌어 방향과 거리를 정합니다"
+                t == AdjustmentType.RECOLOR -> "캔버스를 탭하거나 끌어 바꿀 색을 고릅니다"
+                t == AdjustmentType.CLONE -> ""
+                at.primaryParam() != null -> "캔버스를 손가락으로 좌우로 밀어 '${at.primaryParam()!!.label}' 조절"
+                else -> ""
+            }
+            if (hint.isNotEmpty()) Text(hint, color = UI.text2, fontSize = 11.sp)
             if (ed.selection != null) Text("선택 영역에만 적용됩니다", color = UI.accent, fontSize = 11.sp)
         }
     }

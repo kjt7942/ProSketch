@@ -97,7 +97,7 @@ fun EditorScreen(ed: Editor, onCanvasView: (CanvasView) -> Unit, onExit: () -> U
                 val lx = x - canvasOrigin.x; val ly = y - canvasOrigin.y
                 when (phase) { 0, 1 -> v.colorDropMove(lx, ly); 2 -> v.colorDropEnd(lx, ly, false); else -> v.colorDropEnd(lx, ly, true) }
             })
-            if (ed.mode == Mode.PAINT || ed.mode == Mode.SELECT) Sidebar(ed, Modifier.align(if (ed.prefs.rightHanded) Alignment.CenterEnd else Alignment.CenterStart))
+            if (ed.mode == Mode.PAINT || ed.mode == Mode.SELECT || (ed.mode == Mode.ADJUST && (ed.adjustTool.pencil || ed.adjustTool.type == com.prosketch.app.engine.AdjustmentType.CLONE))) Sidebar(ed, Modifier.align(if (ed.prefs.rightHanded) Alignment.CenterEnd else Alignment.CenterStart))
 
             val bottom = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp, start = 12.dp, end = 12.dp)
             when (ed.mode) {

@@ -3,6 +3,7 @@ package com.prosketch.app.ui.editor
 import android.graphics.Bitmap
 import android.graphics.BlendMode
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PointF
@@ -17,6 +18,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.prosketch.app.engine.AdjustmentType
 import com.prosketch.app.engine.Bitmaps
+import com.prosketch.app.engine.StrokeKind
+import com.prosketch.app.engine.InputPoint
+import com.prosketch.app.engine.BrushStroke
 import com.prosketch.app.engine.ColorBalanceSet
 import com.prosketch.app.engine.CompoundEntry
 import com.prosketch.app.engine.Compositor
@@ -380,16 +384,31 @@ class AdjustTool(private val ed: Editor) {
     var gradientIndex by mutableIntStateOf(1)
     var version by mutableIntStateOf(0)
     var computing by mutableStateOf(false)
+    /** Pencil mode: the adjustment is painted on with the brush instead of covering the layer. */
+    var pencil by mutableStateOf(false)
+    /** Show the untouched layer while held (before / after). */
+    var showOriginal by mutableStateOf(false)
+    /** Clone: source disc position (document px) and whether it stays put. */
+    var cloneSource by mutableStateOf<PointF?>(null)
+    /** Called when the user drags the disc: the next stroke defines a new offset. */
+    fun moveCloneSource(p: PointF) { cloneSource = p; cloneOffset = null }
+    var cloneLocked by mutableStateOf(false)
 
     var layer: Layer? = null
         private set
     private var src: IntArray? = null
+    private var srcBitmap: Bitmap? = null
     private var preview: Bitmap? = null
+    private var pencilMask: Bitmap? = null
+    private var cloneResult: Bitmap? = null
     private var selBytes: ByteArray? = null
     private var job: Job? = null
     private var pending = false
     var liquify: LiquifySession? = null
         private set
+    private val dstIn = Paint(Paint.FILTER_BITMAP_FLAG).apply { blendMode = BlendMode.DST_IN }
+    private val dstOut = Paint(Paint.FILTER_BITMAP_FLAG).apply { blendMode = BlendMode.DST_OUT }
+    private val plus = Paint(Paint.FILTER_BITMAP_FLAG).apply { blendMode = BlendMode.PLUS }
 
     fun begin(t: AdjustmentType) {
         ed.exitModes()
@@ -404,24 +423,40 @@ class AdjustTool(private val ed: Editor) {
         t.params.forEach { params[it.key] = it.default }
         selBytes = ed.selection?.let { SelectionOps.toBytes(it) }
         ed.panel = null
-        if (t == AdjustmentType.LIQUIFY) {
-            liquify = LiquifySession(l, l.bitmap.copy(Bitmap.Config.ARGB_8888, false))
-            ed.mode = com.prosketch.app.ui.editor.Mode.LIQUIFY
-        } else {
-            val w = ed.doc.width; val h = ed.doc.height
-            src = IntArray(w * h).also { l.bitmap.getPixels(it, 0, w, 0, 0, w, h) }
-            preview = l.bitmap.copy(Bitmap.Config.ARGB_8888, true)
-            ed.mode = com.prosketch.app.ui.editor.Mode.ADJUST
-            recompute()
+        if (!t.supportsPencil) pencil = false
+        showOriginal = false
+        val w = ed.doc.width; val h = ed.doc.height
+        when (t) {
+            AdjustmentType.LIQUIFY -> {
+                liquify = LiquifySession(l, l.bitmap.copy(Bitmap.Config.ARGB_8888, false))
+                ed.mode = Mode.LIQUIFY
+            }
+            AdjustmentType.CLONE -> {
+                srcBitmap = l.bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                cloneResult = l.bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                if (cloneSource == null || !cloneLocked) cloneSource = PointF(w / 3f, h / 2f)
+                ed.mode = Mode.ADJUST
+                ed.hud("원을 소스 위치로 옮긴 뒤 브러시로 칠하세요 · 원을 길게 누르면 고정")
+            }
+            else -> {
+                src = IntArray(w * h).also { l.bitmap.getPixels(it, 0, w, 0, 0, w, h) }
+                srcBitmap = l.bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                preview = l.bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                pencilMask = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                ed.mode = Mode.ADJUST
+                if (t == AdjustmentType.RECOLOR) ed.hud("십자선을 바꿀 색 위로 옮기세요 · 현재 색상으로 칠해집니다")
+                recompute()
+            }
         }
         version++
         ed.invalidate()
     }
 
-    fun primaryParam() = type?.params?.firstOrNull()
+    fun primaryParam() = type?.params?.firstOrNull { !it.hidden && it.choices == null }
 
     fun setParam(key: String, v: Float) {
         params[key] = v
+        version++
         recompute()
     }
 
@@ -434,24 +469,72 @@ class AdjustTool(private val ed: Editor) {
         ed.hud("${p.label}: ${formatParam(p, nv)}")
     }
 
+    /** Motion blur and chromatic displacement follow the drag direction and length. */
+    fun usesDragVector(): Boolean = type == AdjustmentType.MOTION_BLUR || (type == AdjustmentType.CHROMATIC && (params["mode"] ?: 0f) >= 0.5f)
+
+    fun dragVector(dxDoc: Float, dyDoc: Float) {
+        val w = ed.doc.width.toFloat(); val h = ed.doc.height.toFloat()
+        when (type) {
+            AdjustmentType.MOTION_BLUR -> {
+                val len = hypot(dxDoc, dyDoc) / max(w, h)
+                params["dist"] = (len * 250f).coerceIn(0f, 100f)
+                params["angle"] = ((Math.toDegrees(atan2(dyDoc, dxDoc).toDouble()).toFloat() + 360f) % 360f)
+                ed.hud("거리 ${params["dist"]!!.toInt()}% · ${params["angle"]!!.toInt()}°")
+            }
+            AdjustmentType.CHROMATIC -> {
+                params["dx"] = (dxDoc / w).coerceIn(-1f, 1f); params["dy"] = (dyDoc / h).coerceIn(-1f, 1f)
+                ed.hud("변위 ${hypot(dxDoc, dyDoc).toInt()}px")
+            }
+            else -> return
+        }
+        version++
+        recompute()
+    }
+
+    fun focal(): PointF? {
+        val t = type ?: return null
+        if (!t.hasFocal) return null
+        if (t == AdjustmentType.CHROMATIC && (params["mode"] ?: 0f) >= 0.5f) return null
+        return PointF((params["fx"] ?: 0.5f) * ed.doc.width, (params["fy"] ?: 0.5f) * ed.doc.height)
+    }
+
+    fun setFocal(x: Float, y: Float) {
+        params["fx"] = (x / ed.doc.width).coerceIn(-0.5f, 1.5f); params["fy"] = (y / ed.doc.height).coerceIn(-0.5f, 1.5f)
+        version++; recompute()
+    }
+
+    fun recolorTarget(): PointF? = if (type == AdjustmentType.RECOLOR) PointF((params["tx"] ?: 0.5f) * ed.doc.width, (params["ty"] ?: 0.5f) * ed.doc.height) else null
+
+    fun setRecolorTarget(x: Float, y: Float) {
+        params["tx"] = (x / ed.doc.width).coerceIn(0f, 1f); params["ty"] = (y / ed.doc.height).coerceIn(0f, 1f)
+        version++; recompute()
+    }
+
+    fun colorChanged() { if (type == AdjustmentType.RECOLOR) recompute() }
+
     fun formatParam(p: com.prosketch.app.engine.FilterParam, v: Float): String =
-        if (p.unit == "%") "${v.toInt()}%" else if (p.unit.isEmpty() && p.max <= 1f) (if (v >= 0.5f) "켬" else "끔") else "${v.toInt()}${p.unit}"
+        if (p.unit == "%") "${v.toInt()}%" else if (p.isSwitch) (if (v >= 0.5f) "켬" else "끔") else "${v.toInt()}${p.unit}"
 
     fun curvesChanged() { version++; recompute() }
     fun balanceChanged() { version++; recompute() }
 
     fun reset() {
         val t = type ?: return
-        if (t == AdjustmentType.LIQUIFY) { liquify?.reset(); ed.invalidate(); return }
+        when (t) {
+            AdjustmentType.LIQUIFY -> { liquify?.reset(); ed.invalidate(); return }
+            AdjustmentType.CLONE -> { srcBitmap?.let { s -> cloneResult?.let { Bitmaps.paste(it, s, 0, 0) } }; ed.invalidate(); return }
+            else -> {}
+        }
         t.params.forEach { params[it.key] = it.default }
         curves = CurveSet(); balance = ColorBalanceSet()
+        pencilMask?.eraseColor(0)
         version++
         recompute()
     }
 
     private fun recompute() {
         val t = type ?: return
-        if (t == AdjustmentType.LIQUIFY) return
+        if (t == AdjustmentType.LIQUIFY || t == AdjustmentType.CLONE) return
         if (job?.isActive == true) { pending = true; return }
         pending = false
         val s = src ?: return
@@ -460,9 +543,10 @@ class AdjustTool(private val ed: Editor) {
         val cs = curves.copy(); val bal = balance.copy()
         val grad = GradientPresets.all.getOrElse(gradientIndex) { GradientPresets.all[0] }
         val sel = selBytes
+        val color = ed.color
         computing = true
         job = ed.scope.launch(Dispatchers.Default) {
-            val out = Filters.apply(t, s, w, h, p, cs, bal, grad)
+            val out = Filters.apply(t, s, w, h, p, cs, bal, grad, color)
             Filters.maskBlend(s, out, sel)
             withContext(Dispatchers.Main) {
                 preview?.setPixels(out, 0, w, 0, 0, w, h)
@@ -473,9 +557,112 @@ class AdjustTool(private val ed: Editor) {
         }
     }
 
+    // ---- brush strokes in Pencil mode and Clone
+    private var stroke: BrushStroke? = null
+    private var strokeErase = false
+    private var cloneOffset: PointF? = null
+    private var strokeFirst: PointF? = null
+    private var strokeLast: PointF? = null
+
+    fun strokeDown(x: Float, y: Float, pressure: Float, stylus: Boolean, screenToDoc: Float) {
+        val t = type ?: return
+        val toolT = if (ed.tool == Tool.ERASER) Tool.ERASER else Tool.BRUSH
+        val brush = ed.brushFor(toolT)
+        val size = ed.brushDocSize(screenToDoc, toolT)
+        val opacity = brush.opacityFor(ed.toolOpacity[toolT] ?: 1f)
+        strokeErase = toolT == Tool.ERASER && t != AdjustmentType.CLONE
+        ed.strokeBuffer.clear()
+        val p = InputPoint(x, y, if (stylus) ed.pressureCurve.map(pressure) else 1f)
+        stroke = BrushStroke(brush, StrokeKind.PAINT, Color.WHITE, size, opacity, ed.strokeBuffer, listOf(android.graphics.Matrix()), stylus, screenToDoc, null).also { it.begin(p) }
+        strokeFirst = PointF(x, y); strokeLast = PointF(x, y)
+        if (t == AdjustmentType.CLONE) {
+            // locked: always sample from the disc; unlocked: keep the offset found at the first stroke
+            val s = cloneSource ?: PointF(x, y)
+            if (cloneLocked || cloneOffset == null) cloneOffset = PointF(x - s.x, y - s.y)
+            else cloneOffset?.let { o -> cloneSource = PointF(x - o.x, y - o.y) }
+        }
+        ed.invalidate()
+    }
+
+    fun strokeMove(x: Float, y: Float, pressure: Float, stylus: Boolean) {
+        val s = stroke ?: return
+        s.add(InputPoint(x, y, if (stylus) ed.pressureCurve.map(pressure) else 1f))
+        strokeLast = PointF(x, y)
+        if (type == AdjustmentType.CLONE && !cloneLocked) cloneOffset?.let { o -> cloneSource = PointF(x - o.x, y - o.y) }
+        ed.invalidate()
+    }
+
+    private fun strokePaint(s: BrushStroke) = Paint().apply { alpha = (s.compositeOpacity * 255f).toInt().coerceIn(0, 255) }
+
+    /** Draws the current stroke's coverage (white) with its opacity. */
+    private fun drawStrokeMask(c: Canvas, s: BrushStroke) {
+        val bounds = RectF(0f, 0f, ed.doc.width.toFloat(), ed.doc.height.toFloat())
+        c.saveLayer(bounds, strokePaint(s))
+        ed.strokeBuffer.drawTo(c, null)
+        ed.selection?.let { c.drawBitmap(it, 0f, 0f, dstIn) }
+        c.restore()
+    }
+
+    /** Source pixels shifted to where the stroke paints, confined to the stroke. */
+    private fun drawCloneStroke(c: Canvas, s: BrushStroke) {
+        val off = cloneOffset ?: return
+        val sb = srcBitmap ?: return
+        val bounds = RectF(0f, 0f, ed.doc.width.toFloat(), ed.doc.height.toFloat())
+        c.saveLayer(bounds, null)
+        drawStrokeMask(c, s)
+        c.drawBitmap(sb, off.x, off.y, Paint(Paint.FILTER_BITMAP_FLAG).apply { blendMode = BlendMode.SRC_IN })
+        c.restore()
+    }
+
+    fun strokeUp() {
+        val s = stroke ?: return
+        s.end()
+        if (type == AdjustmentType.CLONE) cloneResult?.let { drawCloneStroke(Canvas(it), s) }
+        else pencilMask?.let { m ->
+            val c = Canvas(m)
+            if (strokeErase) { c.saveLayer(null, dstOut); drawStrokeMask(c, s); c.restore() } else drawStrokeMask(c, s)
+        }
+        stroke = null
+        ed.strokeBuffer.clear()
+        ed.invalidate()
+    }
+
+    val stroking get() = stroke != null
+
+    fun strokeCancel() { stroke = null; ed.strokeBuffer.clear(); ed.invalidate() }
+
+    /** Original × (1 − mask) + filtered × mask, exact in premultiplied space. */
+    private fun drawPencilComposite(c: Canvas) {
+        val sb = srcBitmap ?: return; val pv = preview ?: return; val m = pencilMask ?: return
+        val bounds = RectF(0f, 0f, ed.doc.width.toFloat(), ed.doc.height.toFloat())
+        val s = stroke
+        c.saveLayer(bounds, null)
+        c.drawBitmap(sb, 0f, 0f, null)
+        c.saveLayer(bounds, dstOut); c.drawBitmap(m, 0f, 0f, null); if (s != null && !strokeErase) drawStrokeMask(c, s); c.restore()
+        c.saveLayer(bounds, plus)
+        c.drawBitmap(pv, 0f, 0f, null)
+        c.saveLayer(bounds, dstIn)
+        c.drawBitmap(m, 0f, 0f, null)
+        if (s != null) { if (strokeErase) { c.saveLayer(null, dstOut); drawStrokeMask(c, s); c.restore() } else drawStrokeMask(c, s) }
+        c.restore()
+        c.restore()
+        c.restore()
+    }
+
     fun drawLive(canvas: Canvas, l: Layer, paint: Paint?): Boolean {
         if (l !== layer) return false
         liquify?.let { it.draw(canvas, paint ?: Paint(Paint.FILTER_BITMAP_FLAG)); return true }
+        val bounds = RectF(0f, 0f, ed.doc.width.toFloat(), ed.doc.height.toFloat())
+        if (showOriginal) { srcBitmap?.let { canvas.drawBitmap(it, 0f, 0f, paint); return true } }
+        if (type == AdjustmentType.CLONE) {
+            val cr = cloneResult ?: return false
+            canvas.saveLayer(bounds, paint)
+            canvas.drawBitmap(cr, 0f, 0f, null)
+            stroke?.let { drawCloneStroke(canvas, it) }
+            canvas.restore()
+            return true
+        }
+        if (pencil) { canvas.saveLayer(bounds, paint); drawPencilComposite(canvas); canvas.restore(); return true }
         val pv = preview ?: return false
         canvas.drawBitmap(pv, 0f, 0f, paint)
         return true
@@ -485,33 +672,48 @@ class AdjustTool(private val ed: Editor) {
     fun apply() {
         val l = layer ?: return
         val t = type ?: return
+        if (stroke != null) strokeUp()
         val full = Rect(0, 0, ed.doc.width, ed.doc.height)
-        if (t == AdjustmentType.LIQUIFY) {
-            val lq = liquify!!
-            if (lq.changed) {
-                val before = lq.source
-                val result = lq.render()
-                ed.selection?.let { sel ->
-                    // keep pixels outside the selection unchanged
-                    val c = Canvas(result)
-                    c.drawBitmap(sel, 0f, 0f, Paint().apply { blendMode = BlendMode.DST_IN })
-                    val base = before.copy(Bitmap.Config.ARGB_8888, true)
-                    Canvas(base).apply { drawBitmap(sel, 0f, 0f, Paint().apply { blendMode = BlendMode.DST_OUT }); drawBitmap(result, 0f, 0f, null) }
-                    result.recycle()
-                    Bitmaps.paste(l.bitmap, base, 0, 0); base.recycle()
-                } ?: run { Bitmaps.paste(l.bitmap, result, 0, 0); result.recycle() }
-                ed.history.push(PixelEntry("픽셀 유동화", l, full, before, l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+        when {
+            t == AdjustmentType.LIQUIFY -> {
+                val lq = liquify!!
+                if (lq.changed) {
+                    val before = lq.source
+                    val result = lq.render()
+                    ed.selection?.let { sel ->
+                        // keep pixels outside the selection unchanged
+                        val c = Canvas(result)
+                        c.drawBitmap(sel, 0f, 0f, Paint().apply { blendMode = BlendMode.DST_IN })
+                        val base = before.copy(Bitmap.Config.ARGB_8888, true)
+                        Canvas(base).apply { drawBitmap(sel, 0f, 0f, Paint().apply { blendMode = BlendMode.DST_OUT }); drawBitmap(result, 0f, 0f, null) }
+                        result.recycle()
+                        Bitmaps.paste(l.bitmap, base, 0, 0); base.recycle()
+                    } ?: run { Bitmaps.paste(l.bitmap, result, 0, 0); result.recycle() }
+                    ed.history.push(PixelEntry("픽셀 유동화", l, full, before, l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+                    l.touch(); ed.afterCommit()
+                }
+            }
+            t == AdjustmentType.CLONE -> {
+                val cr = cloneResult ?: return
+                val before = srcBitmap ?: return
+                Bitmaps.paste(l.bitmap, cr, 0, 0)
+                ed.history.push(PixelEntry("복제", l, full, before.copy(Bitmap.Config.ARGB_8888, false), l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
                 l.touch(); ed.afterCommit()
             }
-        } else {
-            // make sure the preview reflects the latest parameters
-            // the async job finishes on the main thread, so never block on it here: recompute synchronously instead
-            if (job?.isActive == true || pending) { job?.cancel(); finalizeSync() }
-            val pv = preview ?: return
-            val before = l.bitmap.copy(Bitmap.Config.ARGB_8888, false)
-            Bitmaps.paste(l.bitmap, pv, 0, 0)
-            ed.history.push(PixelEntry(t.label, l, full, before, l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
-            l.touch(); ed.afterCommit()
+            else -> {
+                // make sure the preview reflects the latest parameters
+                // the async job finishes on the main thread, so never block on it here: recompute synchronously instead
+                if (job?.isActive == true || pending) { job?.cancel(); finalizeSync() }
+                val pv = preview ?: return
+                val before = l.bitmap.copy(Bitmap.Config.ARGB_8888, false)
+                if (pencil) {
+                    val out = Bitmap.createBitmap(ed.doc.width, ed.doc.height, Bitmap.Config.ARGB_8888)
+                    drawPencilComposite(Canvas(out))
+                    Bitmaps.paste(l.bitmap, out, 0, 0); out.recycle()
+                } else Bitmaps.paste(l.bitmap, pv, 0, 0)
+                ed.history.push(PixelEntry(t.label, l, full, before, l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+                l.touch(); ed.afterCommit()
+            }
         }
         end()
     }
@@ -520,7 +722,7 @@ class AdjustTool(private val ed: Editor) {
         val t = type ?: return
         val s = src ?: return
         val w = ed.doc.width; val h = ed.doc.height
-        val out = Filters.apply(t, s, w, h, HashMap(params), curves.copy(), balance.copy(), GradientPresets.all.getOrElse(gradientIndex) { GradientPresets.all[0] })
+        val out = Filters.apply(t, s, w, h, HashMap(params), curves.copy(), balance.copy(), GradientPresets.all.getOrElse(gradientIndex) { GradientPresets.all[0] }, ed.color)
         Filters.maskBlend(s, out, selBytes)
         preview?.setPixels(out, 0, w, 0, 0, w, h)
         pending = false
@@ -530,12 +732,17 @@ class AdjustTool(private val ed: Editor) {
 
     private fun end() {
         job?.cancel(); job = null; pending = false
+        stroke = null; ed.strokeBuffer.clear()
         preview?.recycle(); preview = null
+        pencilMask?.recycle(); pencilMask = null
+        cloneResult?.recycle(); cloneResult = null
+        srcBitmap = null
         src = null; selBytes = null; layer = null
         liquify = null
         type = null
         computing = false
-        if (ed.mode == com.prosketch.app.ui.editor.Mode.ADJUST || ed.mode == com.prosketch.app.ui.editor.Mode.LIQUIFY) ed.mode = com.prosketch.app.ui.editor.Mode.PAINT
+        showOriginal = false
+        if (ed.mode == Mode.ADJUST || ed.mode == Mode.LIQUIFY) ed.mode = Mode.PAINT
         version++
     }
 

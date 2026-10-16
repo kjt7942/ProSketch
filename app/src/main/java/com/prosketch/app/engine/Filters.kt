@@ -17,7 +17,20 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.random.Random
 
-data class FilterParam(val key: String, val label: String, val min: Float, val max: Float, val default: Float, val unit: String = "%")
+/**
+ * One adjustment parameter. [choices] makes it a segmented choice (value = index); [hidden] params are
+ * set on the canvas (focal point, direction); [visibleWhen] shows it only for some choice values.
+ */
+data class FilterParam(
+    val key: String, val label: String, val min: Float, val max: Float, val default: Float, val unit: String = "%",
+    val choices: List<String>? = null, val hidden: Boolean = false, val visibleWhen: Pair<String, Set<Int>>? = null,
+) {
+    fun visible(p: Map<String, Float>) = !hidden && (visibleWhen == null || ((p[visibleWhen.first] ?: 0f).roundToInt() in visibleWhen.second))
+    val isSwitch get() = choices == null && unit.isEmpty() && max <= 1f
+}
+
+private fun choice(key: String, label: String, options: List<String>, default: Int = 0) =
+    FilterParam(key, label, 0f, (options.size - 1).toFloat(), default.toFloat(), "", choices = options)
 
 enum class AdjustmentType(val label: String, val params: List<FilterParam>, val section: Int) {
     HSB("색조, 채도, 밝기", listOf(
@@ -30,6 +43,9 @@ enum class AdjustmentType(val label: String, val params: List<FilterParam>, val 
         FilterParam("yb", "노랑 ↔ 파랑", -100f, 100f, 0f)), 0),
     CURVES("커브", emptyList(), 0),
     GRADIENT_MAP("그라디언트 맵", listOf(FilterParam("amount", "강도", 0f, 100f, 100f)), 0),
+    RECOLOR("재채색", listOf(
+        FilterParam("flood", "채우기 범위", 0f, 100f, 25f),
+        FilterParam("tx", "", 0f, 1f, 0.5f, hidden = true), FilterParam("ty", "", 0f, 1f, 0.5f, hidden = true)), 0),
     BRIGHTNESS_CONTRAST("밝기/대비", listOf(
         FilterParam("bri", "밝기", -100f, 100f, 0f),
         FilterParam("con", "대비", -100f, 100f, 0f)), 0),
@@ -39,26 +55,56 @@ enum class AdjustmentType(val label: String, val params: List<FilterParam>, val 
     MOTION_BLUR("움직임 흐림 효과", listOf(
         FilterParam("dist", "거리", 0f, 100f, 20f),
         FilterParam("angle", "각도", 0f, 360f, 0f, "°")), 1),
+    PERSPECTIVE_BLUR("원근 흐림 효과", listOf(
+        FilterParam("amount", "흐림", 0f, 100f, 25f),
+        choice("mode", "방식", listOf("위치", "방향")),
+        FilterParam("angle", "방향", 0f, 360f, 0f, "°", visibleWhen = "mode" to setOf(1)),
+        FilterParam("fx", "", 0f, 1f, 0.5f, hidden = true), FilterParam("fy", "", 0f, 1f, 0.5f, hidden = true)), 1),
     SHARPEN("선명하게", listOf(FilterParam("amount", "선명도", 0f, 100f, 40f)), 2),
     NOISE("노이즈", listOf(
-        FilterParam("amount", "양", 0f, 100f, 25f),
-        FilterParam("mono", "흑백 노이즈", 0f, 1f, 1f, "")), 2),
+        FilterParam("amount", "노이즈", 0f, 100f, 30f),
+        choice("style", "모양", listOf("구름", "물결", "능선")),
+        FilterParam("scale", "크기", 1f, 100f, 25f),
+        FilterParam("octaves", "옥타브", 1f, 8f, 4f, ""),
+        FilterParam("turb", "난류", 0f, 100f, 0f),
+        choice("multi", "채널", listOf("단색", "다색")),
+        FilterParam("additive", "더하기 (원본 위에 겹침)", 0f, 1f, 1f, "")), 2),
     BLOOM("블룸", listOf(
+        FilterParam("amount", "블룸", 0f, 100f, 40f),
         FilterParam("threshold", "전환", 0f, 100f, 55f),
         FilterParam("size", "크기", 0f, 100f, 35f),
         FilterParam("burn", "번", 0f, 100f, 50f)), 2),
     GLITCH("글리치", listOf(
-        FilterParam("amount", "양", 0f, 100f, 35f),
-        FilterParam("block", "블록 크기", 1f, 100f, 30f),
+        FilterParam("amount", "글리치", 0f, 100f, 35f),
+        choice("mode", "효과", listOf("아티팩트", "웨이브", "시그널", "분산")),
+        FilterParam("block", "블록 크기", 1f, 100f, 30f, visibleWhen = "mode" to setOf(0, 2)),
+        FilterParam("amp", "진폭", 0f, 100f, 40f, visibleWhen = "mode" to setOf(1)),
+        FilterParam("freq", "주파수", 0f, 100f, 40f, visibleWhen = "mode" to setOf(1)),
+        FilterParam("rs", "빨강 이동", -100f, 100f, 30f, visibleWhen = "mode" to setOf(3)),
+        FilterParam("gs", "녹색 이동", -100f, 100f, -20f, visibleWhen = "mode" to setOf(3)),
+        FilterParam("bs", "파랑 이동", -100f, 100f, 10f, visibleWhen = "mode" to setOf(3)),
+        FilterParam("zoom", "확대", 1f, 100f, 50f),
         FilterParam("seed", "변형", 0f, 100f, 1f, "")), 2),
     HALFTONE("하프톤", listOf(
-        FilterParam("size", "크기", 1f, 100f, 25f),
-        FilterParam("mono", "흑백", 0f, 1f, 0f, "")), 2),
+        FilterParam("size", "하프톤", 1f, 100f, 25f),
+        choice("style", "방식", listOf("풀 컬러", "스크린 프린트", "신문"))), 2),
     CHROMATIC("색수차", listOf(
-        FilterParam("amount", "변위", 0f, 100f, 25f),
-        FilterParam("falloff", "감쇠", 0f, 100f, 50f)), 2),
+        FilterParam("amount", "색수차", 0f, 100f, 25f),
+        choice("mode", "방식", listOf("원근", "변위")),
+        FilterParam("transition", "전환", 0f, 100f, 30f, visibleWhen = "mode" to setOf(0)),
+        FilterParam("falloff", "감쇠", 0f, 100f, 30f, visibleWhen = "mode" to setOf(0)),
+        FilterParam("blur", "흐림", 0f, 100f, 0f, visibleWhen = "mode" to setOf(1)),
+        FilterParam("transparency", "투명도", 0f, 100f, 0f, visibleWhen = "mode" to setOf(1)),
+        FilterParam("fx", "", 0f, 1f, 0.5f, hidden = true), FilterParam("fy", "", 0f, 1f, 0.5f, hidden = true),
+        FilterParam("dx", "", -1f, 1f, 0.01f, hidden = true), FilterParam("dy", "", -1f, 1f, 0f, hidden = true)), 2),
     PIXELATE("모자이크", listOf(FilterParam("size", "크기", 1f, 100f, 12f, "px")), 2),
-    LIQUIFY("픽셀 유동화", emptyList(), 3);
+    LIQUIFY("픽셀 유동화", emptyList(), 3),
+    CLONE("복제", emptyList(), 3);
+
+    /** Types that can be painted on with a brush instead of applied to the whole layer. */
+    val supportsPencil get() = this != LIQUIFY && this != CLONE && this != RECOLOR
+    /** Types with a focal point disc on the canvas. */
+    val hasFocal get() = this == PERSPECTIVE_BLUR || this == CHROMATIC
 }
 
 data class GradientPreset(val name: String, val colors: IntArray, val stops: FloatArray)
@@ -159,32 +205,41 @@ object Filters {
     inline fun b(c: Int) = c and 0xFF
     inline fun argb(a: Int, r: Int, g: Int, b: Int) = (a shl 24) or (r.coerceIn(0, 255) shl 16) or (g.coerceIn(0, 255) shl 8) or b.coerceIn(0, 255)
 
-    /** Generic entry. [scale] = document size relative to 1000 px, so pixel-sized params scale with the canvas. */
+    /** Generic entry. Pixel-sized params scale with the canvas (relative to 1000 px). [color] is used by Recolor. */
     fun apply(
         type: AdjustmentType, src: IntArray, w: Int, h: Int, params: Map<String, Float>,
-        curves: CurveSet?, balance: ColorBalanceSet?, gradient: GradientPreset?,
+        curves: CurveSet?, balance: ColorBalanceSet?, gradient: GradientPreset?, color: Int = Color.BLACK,
     ): IntArray {
         val out = IntArray(src.size)
         val docScale = max(w, h) / 1000f
+        val ds = docScale.coerceAtLeast(0.5f)
         fun p(k: String) = params[k] ?: type.params.firstOrNull { it.key == k }?.default ?: 0f
+        fun i(k: String) = p(k).roundToInt()
         when (type) {
             AdjustmentType.HSB -> hsb(src, out, w, h, p("hue"), p("sat") / 100f, p("bri") / 100f)
             AdjustmentType.COLOR_BALANCE -> colorBalance(src, out, w, h, balance ?: ColorBalanceSet())
             AdjustmentType.CURVES -> curves(src, out, w, h, curves ?: CurveSet())
             AdjustmentType.GRADIENT_MAP -> gradientMap(src, out, w, h, gradient ?: GradientPresets.all[0], p("amount") / 100f)
+            AdjustmentType.RECOLOR -> recolor(src, out, w, h, (p("tx") * w).toInt(), (p("ty") * h).toInt(), p("flood") / 100f, color)
             AdjustmentType.BRIGHTNESS_CONTRAST -> brightnessContrast(src, out, w, h, p("bri") / 100f, p("con") / 100f)
-            AdjustmentType.POSTERIZE -> posterize(src, out, w, h, p("levels").roundToInt())
+            AdjustmentType.POSTERIZE -> posterize(src, out, w, h, i("levels"))
             AdjustmentType.INVERT -> invert(src, out, w, h, p("amount") / 100f)
-            AdjustmentType.GAUSSIAN_BLUR -> gaussian(src, out, w, h, p("radius") / 100f * 120f * docScale.coerceAtLeast(0.5f))
-            AdjustmentType.MOTION_BLUR -> motionBlur(src, out, w, h, p("dist") / 100f * 220f * docScale.coerceAtLeast(0.5f), p("angle"))
+            AdjustmentType.GAUSSIAN_BLUR -> gaussian(src, out, w, h, p("radius") / 100f * 120f * ds)
+            AdjustmentType.MOTION_BLUR -> motionBlur(src, out, w, h, p("dist") / 100f * 220f * ds, p("angle"))
+            AdjustmentType.PERSPECTIVE_BLUR -> perspectiveBlur(src, out, w, h, p("amount") / 100f, i("mode") == 1, p("fx") * w, p("fy") * h, p("angle"))
             AdjustmentType.SHARPEN -> sharpen(src, out, w, h, p("amount") / 100f, 1.2f * docScale.coerceIn(0.6f, 3f))
-            AdjustmentType.NOISE -> noise(src, out, w, h, p("amount") / 100f, p("mono") >= 0.5f)
-            AdjustmentType.BLOOM -> bloom(src, out, w, h, p("threshold") / 100f, p("size") / 100f * 80f * docScale.coerceAtLeast(0.5f), p("burn") / 100f)
-            AdjustmentType.GLITCH -> glitch(src, out, w, h, p("amount") / 100f, (p("block") / 100f * 120f * docScale.coerceAtLeast(0.5f)).coerceAtLeast(2f), p("seed").toInt())
-            AdjustmentType.HALFTONE -> halftone(src, out, w, h, (p("size") / 100f * 60f * docScale.coerceAtLeast(0.5f)).coerceAtLeast(3f), p("mono") >= 0.5f)
-            AdjustmentType.CHROMATIC -> chromatic(src, out, w, h, p("amount") / 100f * 40f * docScale.coerceAtLeast(0.5f), p("falloff") / 100f)
-            AdjustmentType.PIXELATE -> pixelate(src, out, w, h, max(1, (p("size") * docScale.coerceAtLeast(0.5f)).roundToInt()))
-            AdjustmentType.LIQUIFY -> src.copyInto(out)
+            AdjustmentType.NOISE -> noise(src, out, w, h, p("amount") / 100f, i("style"), (6f + p("scale") / 100f * 320f) * ds,
+                i("octaves").coerceIn(1, 8), p("turb") / 100f, i("multi") == 1, p("additive") >= 0.5f)
+            AdjustmentType.BLOOM -> bloom(src, out, w, h, p("amount") / 100f, p("threshold") / 100f, p("size") / 100f * 80f * ds, p("burn") / 100f)
+            AdjustmentType.GLITCH -> glitch(src, out, w, h, p("amount") / 100f, i("mode"), (p("block") / 100f * 120f * ds).coerceAtLeast(2f),
+                p("amp") / 100f, p("freq") / 100f, p("rs") / 100f, p("gs") / 100f, p("bs") / 100f, 0.25f + p("zoom") / 100f * 3.75f, i("seed"))
+            AdjustmentType.HALFTONE -> halftone(src, out, w, h, (p("size") / 100f * 60f * ds).coerceAtLeast(3f), i("style"))
+            AdjustmentType.CHROMATIC -> if (i("mode") == 0)
+                chromatic(src, out, w, h, p("amount") / 100f * 40f * ds, p("fx") * w, p("fy") * h, p("transition") / 100f, p("falloff") / 100f)
+            else chromaticDisplace(src, out, w, h, p("dx") * w * (p("amount") / 100f) * 2f, p("dy") * h * (p("amount") / 100f) * 2f,
+                p("blur") / 100f * 30f * ds, p("transparency") / 100f)
+            AdjustmentType.PIXELATE -> pixelate(src, out, w, h, max(1, (p("size") * ds).roundToInt()))
+            AdjustmentType.LIQUIFY, AdjustmentType.CLONE -> src.copyInto(out)
         }
         return out
     }
@@ -421,22 +476,64 @@ object Filters {
         }
     }
 
-    private fun noise(src: IntArray, out: IntArray, w: Int, h: Int, amount: Float, mono: Boolean) = parallelRows(h) { y0, y1 ->
-        val rnd = Random(y0 * 7 + 1)
-        val k = amount * 160f
-        for (i in y0 * w until y1 * w) {
-            val c = src[i]
-            if (a(c) == 0) { out[i] = c; continue }
-            if (mono) {
-                val n = ((rnd.nextFloat() - 0.5f) * k).toInt()
-                out[i] = argb(a(c), r(c) + n, g(c) + n, b(c) + n)
-            } else {
-                out[i] = argb(a(c), r(c) + ((rnd.nextFloat() - 0.5f) * k).toInt(), g(c) + ((rnd.nextFloat() - 0.5f) * k).toInt(), b(c) + ((rnd.nextFloat() - 0.5f) * k).toInt())
-            }
-        }
+    // ---------- value noise (fractal) ----------
+
+    private fun hash2(x: Int, y: Int, seed: Int): Float {
+        var h = x * 374761393 + y * 668265263 + seed * 144269504
+        h = (h xor (h ushr 13)) * 1274126177
+        h = h xor (h ushr 16)
+        return (h and 0xFFFFFF) / 16777215f
     }
 
-    private fun bloom(src: IntArray, out: IntArray, w: Int, h: Int, threshold: Float, size: Float, burn: Float) {
+    private fun vnoise(x: Float, y: Float, seed: Int): Float {
+        val x0 = floor(x).toInt(); val y0 = floor(y).toInt()
+        val fx = x - x0; val fy = y - y0
+        val u = fx * fx * (3 - 2 * fx); val v = fy * fy * (3 - 2 * fy)
+        val a = hash2(x0, y0, seed); val b = hash2(x0 + 1, y0, seed)
+        val c = hash2(x0, y0 + 1, seed); val d = hash2(x0 + 1, y0 + 1, seed)
+        return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v
+    }
+
+    /** Fractal noise in 0..1. style 0 = clouds (fBm), 1 = billows, 2 = ridges. */
+    private fun fractal(x: Float, y: Float, seed: Int, style: Int, octaves: Int, turbulence: Float): Float {
+        var px = x; var py = y
+        if (turbulence > 0f) {
+            px += (vnoise(x * 0.7f + 17f, y * 0.7f, seed + 91) - 0.5f) * 4f * turbulence
+            py += (vnoise(x * 0.7f, y * 0.7f + 31f, seed + 57) - 0.5f) * 4f * turbulence
+        }
+        var sum = 0f; var amp = 1f; var norm = 0f; var f = 1f
+        for (o in 0 until octaves) {
+            val n = vnoise(px * f, py * f, seed + o * 1013)
+            sum += amp * when (style) { 1 -> abs(n * 2f - 1f); 2 -> 1f - abs(n * 2f - 1f); else -> n }
+            norm += amp; amp *= 0.5f; f *= 2f
+        }
+        return (sum / norm).coerceIn(0f, 1f)
+    }
+
+    private fun noise(src: IntArray, out: IntArray, w: Int, h: Int, amount: Float, style: Int, cell: Float, octaves: Int, turbulence: Float, multi: Boolean, additive: Boolean) =
+        parallelRows(h) { y0, y1 ->
+            val inv = 1f / cell
+            for (y in y0 until y1) for (x in 0 until w) {
+                val i = y * w + x
+                val c = src[i]
+                val fx = x * inv; val fy = y * inv
+                val nr = fractal(fx, fy, 11, style, octaves, turbulence)
+                val ng = if (multi) fractal(fx, fy, 23, style, octaves, turbulence) else nr
+                val nb = if (multi) fractal(fx, fy, 37, style, octaves, turbulence) else nr
+                if (additive) {
+                    if (a(c) == 0) { out[i] = c; continue }
+                    val k = amount * 255f
+                    out[i] = argb(a(c), (r(c) + (nr - 0.5f) * k).toInt(), (g(c) + (ng - 0.5f) * k).toInt(), (b(c) + (nb - 0.5f) * k).toInt())
+                } else {
+                    // opaque noise mixed over the image; can cover it completely at 100 %
+                    val oa = (a(c) + (255 - a(c)) * amount).toInt()
+                    out[i] = argb(oa, (r(c) + (nr * 255f - r(c)) * amount).toInt(), (g(c) + (ng * 255f - g(c)) * amount).toInt(), (b(c) + (nb * 255f - b(c)) * amount).toInt())
+                }
+            }
+        }
+
+    private fun bloom(src: IntArray, out: IntArray, w: Int, h: Int, amount: Float, threshold: Float, size: Float, burn: Float) {
+        if (amount <= 0f) { src.copyInto(out); return }
         val bright = IntArray(src.size)
         val th = threshold * 255f
         for (i in src.indices) {
@@ -447,12 +544,11 @@ object Filters {
         }
         val bl = IntArray(src.size)
         gaussian(bright, bl, w, h, size.coerceAtLeast(1f))
-        val gain = 0.5f + burn * 2.5f
+        val gain = amount * (0.5f + burn * 2.5f)
         parallelRows(h) { y0, y1 ->
             for (i in y0 * w until y1 * w) {
                 val c = src[i]; val g2 = bl[i]
                 val ga = a(g2) / 255f * gain
-                // screen blend
                 fun scr(x: Int, y: Int): Int { val yy = (y * ga).coerceAtMost(255f); return (255f - (255f - x) * (255f - yy) / 255f).toInt() }
                 val outA = max(a(c), (a(g2) * min(1f, gain)).toInt().coerceAtMost(255))
                 if (a(c) == 0) { out[i] = argb(outA, r(g2), g(g2), b(g2)); continue }
@@ -461,32 +557,80 @@ object Filters {
         }
     }
 
-    private fun glitch(src: IntArray, out: IntArray, w: Int, h: Int, amount: Float, block: Float, seed: Int) {
+    private fun sample(src: IntArray, w: Int, h: Int, x: Int, y: Int) = src[y.coerceIn(0, h - 1) * w + x.coerceIn(0, w - 1)]
+
+    private fun glitch(src: IntArray, out: IntArray, w: Int, h: Int, amount: Float, mode: Int, block0: Float, amp: Float, freq: Float,
+                       rs: Float, gs: Float, bs: Float, zoom: Float, seed: Int) {
         src.copyInto(out)
         if (amount <= 0f) return
         val rnd = Random(seed * 977 + 3)
-        val bands = (h / block).toInt().coerceAtLeast(1)
-        val maxShift = (w * 0.12f * amount).toInt().coerceAtLeast(1)
-        for (bI in 0 until bands) {
-            if (rnd.nextFloat() > amount * 0.8f) continue
-            val y0 = (bI * block).toInt(); val bh = (block * (0.3f + rnd.nextFloat())).toInt().coerceAtLeast(1)
-            val shift = rnd.nextInt(-maxShift, maxShift + 1)
-            val channelMode = rnd.nextInt(3)
-            for (y in y0 until min(h, y0 + bh)) {
-                for (x in 0 until w) {
-                    val sx = (x - shift).coerceIn(0, w - 1)
-                    val s = src[y * w + sx]; val o = src[y * w + x]
-                    out[y * w + x] = when (channelMode) {
-                        0 -> s
-                        1 -> argb(max(a(s), a(o)), r(s), g(o), b(o))
-                        else -> argb(max(a(s), a(o)), r(o), g(o), b(s))
+        val block = (block0 * zoom).coerceAtLeast(2f)
+        when (mode) {
+            1 -> { // wave: rows and columns ripple
+                if (amp <= 0f || freq <= 0f) return
+                val a1 = amp * amount * w * 0.08f
+                val period = (h * (1.05f - freq) * 0.5f / zoom).coerceAtLeast(6f)
+                parallelRows(h) { y0, y1 ->
+                    for (y in y0 until y1) {
+                        val ox = (a1 * sin(2f * PI.toFloat() * y / period)).roundToInt()
+                        for (x in 0 until w) {
+                            val oy = (a1 * 0.35f * sin(2f * PI.toFloat() * x / (period * 1.7f))).roundToInt()
+                            out[y * w + x] = sample(src, w, h, x - ox, y - oy)
+                        }
+                    }
+                }
+            }
+            2 -> { // signal: scan lines, dropped rows and channel slips
+                val lineH = (block / 6f).roundToInt().coerceAtLeast(1)
+                var y = 0
+                while (y < h) {
+                    val hit = rnd.nextFloat() < amount * 0.55f
+                    val shift = if (hit) rnd.nextInt(-(w * 0.06f * amount).toInt() - 1, (w * 0.06f * amount).toInt() + 2) else 0
+                    val dim = if ((y / lineH) % 2 == 0) 1f - amount * 0.25f else 1f
+                    for (yy in y until min(h, y + lineH)) for (x in 0 until w) {
+                        val s = sample(src, w, h, x - shift, yy); val o = src[yy * w + x]
+                        val base = if (hit) argb(max(a(s), a(o)), r(s), g(o), b(sample(src, w, h, x + shift / 2, yy))) else o
+                        out[yy * w + x] = argb(a(base), (r(base) * dim).toInt(), (g(base) * dim).toInt(), (b(base) * dim).toInt())
+                    }
+                    y += lineH
+                }
+            }
+            3 -> { // diverge: independent R/G/B offsets
+                val k = amount * w * 0.03f * zoom
+                val rx = (rs * k).roundToInt(); val ry = (rs * k).roundToInt()
+                val gx = (gs * k).roundToInt(); val gy = (-gs * k).roundToInt()
+                val by = (bs * k).roundToInt()
+                parallelRows(h) { y0, y1 ->
+                    for (y in y0 until y1) for (x in 0 until w) {
+                        val cr = sample(src, w, h, x - rx, y - ry); val cg = sample(src, w, h, x - gx, y - gy); val cb = sample(src, w, h, x, y - by)
+                        out[y * w + x] = argb(max(a(cr), max(a(cg), a(cb))), r(cr), g(cg), b(cb))
+                    }
+                }
+            }
+            else -> { // artifact: displaced blocks
+                val bands = (h / block).toInt().coerceAtLeast(1)
+                val maxShift = (w * 0.12f * amount).toInt().coerceAtLeast(1)
+                for (bI in 0 until bands) {
+                    if (rnd.nextFloat() > amount * 0.8f) continue
+                    val y0 = (bI * block).toInt(); val bh = (block * (0.3f + rnd.nextFloat())).toInt().coerceAtLeast(1)
+                    val bx0 = rnd.nextInt(0, max(1, w - 1)); val bw = (block * (2f + rnd.nextFloat() * 10f)).toInt().coerceAtLeast(2)
+                    val shift = rnd.nextInt(-maxShift, maxShift + 1)
+                    val channelMode = rnd.nextInt(3)
+                    for (y in y0 until min(h, y0 + bh)) for (x in max(0, bx0 - bw) until min(w, bx0 + bw)) {
+                        val s = sample(src, w, h, x - shift, y); val o = src[y * w + x]
+                        out[y * w + x] = when (channelMode) {
+                            0 -> s
+                            1 -> argb(max(a(s), a(o)), r(s), g(o), b(o))
+                            else -> argb(max(a(s), a(o)), r(o), g(o), b(s))
+                        }
                     }
                 }
             }
         }
     }
 
-    private fun halftone(src: IntArray, out: IntArray, w: Int, h: Int, cell: Float, mono: Boolean) {
+    /** style 0 = full colour (dots over a lightened original), 1 = screen print (colour dots on white), 2 = newspaper (black dots). */
+    private fun halftone(src: IntArray, out: IntArray, w: Int, h: Int, cell: Float, style: Int) {
         val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
         val cv = android.graphics.Canvas(bmp)
         val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
@@ -505,13 +649,23 @@ object Filters {
                     val avgA = (sa / n).toInt()
                     val l = (0.299f * ar + 0.587f * ag + 0.114f * ab) / 255f
                     val rad = cs * 0.5f * 1.414f * sqrt(1f - l).coerceIn(0f, 1f)
-                    if (mono) {
-                        cv.drawRect(x.toFloat(), y.toFloat(), (x + cs).toFloat(), (y + cs).toFloat(), paint.apply { color = Color.argb(avgA, 255, 255, 255) })
-                        paint.color = Color.argb(avgA, 0, 0, 0)
-                        cv.drawCircle(x + cs / 2f, y + cs / 2f, rad, paint)
-                    } else {
-                        paint.color = Color.argb(avgA, ar, ag, ab)
-                        cv.drawCircle(x + cs / 2f, y + cs / 2f, cs * 0.5f * 1.414f * (0.35f + 0.65f * sqrt(1f - l * 0.85f)), paint)
+                    val l2 = x.toFloat(); val t2 = y.toFloat(); val r2 = (x + cs).toFloat(); val b2 = (y + cs).toFloat()
+                    when (style) {
+                        2 -> {
+                            cv.drawRect(l2, t2, r2, b2, paint.apply { color = Color.argb(avgA, 255, 255, 255) })
+                            paint.color = Color.argb(avgA, 0, 0, 0)
+                            cv.drawCircle(x + cs / 2f, y + cs / 2f, rad, paint)
+                        }
+                        1 -> {
+                            cv.drawRect(l2, t2, r2, b2, paint.apply { color = Color.argb(avgA, 255, 255, 255) })
+                            paint.color = Color.argb(avgA, ar, ag, ab)
+                            cv.drawCircle(x + cs / 2f, y + cs / 2f, cs * 0.5f * 1.414f * (0.3f + 0.7f * sqrt(1f - l * 0.85f)), paint)
+                        }
+                        else -> {
+                            cv.drawRect(l2, t2, r2, b2, paint.apply { color = Color.argb(avgA, (ar + 255) / 2, (ag + 255) / 2, (ab + 255) / 2) })
+                            paint.color = Color.argb(avgA, (ar * 0.8f).toInt(), (ag * 0.8f).toInt(), (ab * 0.8f).toInt())
+                            cv.drawCircle(x + cs / 2f, y + cs / 2f, cs * 0.5f * 1.414f * (0.35f + 0.65f * sqrt(1f - l * 0.85f)), paint)
+                        }
                     }
                 }
                 x += cs
@@ -522,20 +676,93 @@ object Filters {
         bmp.recycle()
     }
 
-    private fun chromatic(src: IntArray, out: IntArray, w: Int, h: Int, amount: Float, falloff: Float) {
-        val cx = w / 2f; val cy = h / 2f
-        val maxR = hypot(cx, cy)
+    /** Perspective: red/blue separate outward from a focal point; clear zone set by falloff, edge by transition. */
+    private fun chromatic(src: IntArray, out: IntArray, w: Int, h: Int, amount: Float, cx: Float, cy: Float, transition: Float, falloff: Float) {
+        val maxR = max(hypot(cx, cy), max(hypot(w - cx, cy), max(hypot(cx, h - cy), hypot(w - cx, h - cy))))
+        val start = falloff * 0.6f
+        val span = (0.05f + (1f - transition) * 0.9f)
         parallelRows(h) { y0, y1 ->
             for (y in y0 until y1) for (x in 0 until w) {
                 val dx = x - cx; val dy = y - cy
-                val d = hypot(dx, dy) / maxR
-                val k = amount * d.pow(0.5f + falloff * 2f)
-                val nx = if (d > 0) dx / (d * maxR) else 0f; val ny = if (d > 0) dy / (d * maxR) else 0f
-                val rx = (x + nx * k).roundToInt().coerceIn(0, w - 1); val ry = (y + ny * k).roundToInt().coerceIn(0, h - 1)
-                val bx = (x - nx * k).roundToInt().coerceIn(0, w - 1); val by = (y - ny * k).roundToInt().coerceIn(0, h - 1)
-                val c = src[y * w + x]; val cr = src[ry * w + rx]; val cb = src[by * w + bx]
+                val dist = hypot(dx, dy)
+                val d = dist / maxR
+                val t = ((d - start) / span).coerceIn(0f, 1f)
+                val k = amount * t * t * (3 - 2 * t) * (0.4f + d)
+                val nx = if (dist > 0) dx / dist else 0f; val ny = if (dist > 0) dy / dist else 0f
+                val cr = sample(src, w, h, (x + nx * k).roundToInt(), (y + ny * k).roundToInt())
+                val cb = sample(src, w, h, (x - nx * k).roundToInt(), (y - ny * k).roundToInt())
+                val c = src[y * w + x]
                 out[y * w + x] = argb(max(a(c), max(a(cr), a(cb))), r(cr), g(c), b(cb))
             }
+        }
+    }
+
+    /** Displace: red shifted by (dx,dy) and blue the opposite way, optionally blurred and faded. */
+    private fun chromaticDisplace(src: IntArray, out: IntArray, w: Int, h: Int, dx: Float, dy: Float, blur: Float, transparency: Float) {
+        val ox = dx.roundToInt(); val oy = dy.roundToInt()
+        parallelRows(h) { y0, y1 ->
+            for (y in y0 until y1) for (x in 0 until w) {
+                val c = src[y * w + x]
+                val cr = sample(src, w, h, x - ox, y - oy); val cb = sample(src, w, h, x + ox, y + oy)
+                out[y * w + x] = argb(max(a(c), max(a(cr), a(cb))), r(cr), g(c), b(cb))
+            }
+        }
+        if (blur >= 1f) { val tmp = out.copyOf(); gaussian(tmp, out, w, h, blur) }
+        if (transparency > 0f) for (i in out.indices) {
+            val s = src[i]; val o = out[i]; val t = transparency
+            out[i] = argb((a(o) + (a(s) - a(o)) * t).toInt(), (r(o) + (r(s) - r(o)) * t).toInt(), (g(o) + (g(s) - g(o)) * t).toInt(), (b(o) + (b(s) - b(o)) * t).toInt())
+        }
+    }
+
+    /** Positional = zoom blur towards the focal point; directional = streaks growing along [angleDeg] on one side. */
+    private fun perspectiveBlur(src: IntArray, out: IntArray, w: Int, h: Int, amount: Float, directional: Boolean, fx: Float, fy: Float, angleDeg: Float) {
+        if (amount <= 0f) { src.copyInto(out); return }
+        val pl = toPremulPlanes(src)
+        val res = Array(4) { FloatArray(w * h) }
+        val taps = 20
+        val ux = cos(Math.toRadians(angleDeg.toDouble())).toFloat(); val uy = sin(Math.toRadians(angleDeg.toDouble())).toFloat()
+        val k = amount * 0.35f
+        parallelRows(h) { y0, y1 ->
+            for (y in y0 until y1) for (x in 0 until w) {
+                var vx: Float; var vy: Float
+                if (directional) {
+                    val s = (x - fx) * ux + (y - fy) * uy
+                    if (s <= 0f) { val j = y * w + x; for (c in 0..3) res[c][j] = pl[c][j]; continue }
+                    vx = ux * s * k; vy = uy * s * k
+                } else { vx = (fx - x) * k; vy = (fy - y) * k }
+                var sa = 0f; var sr = 0f; var sg = 0f; var sb = 0f
+                for (t in 0 until taps) {
+                    val f = t / (taps - 1f) - (if (directional) 0.5f else 0f)
+                    val xx = (x + vx * f).roundToInt().coerceIn(0, w - 1); val yy = (y + vy * f).roundToInt().coerceIn(0, h - 1)
+                    val j = yy * w + xx
+                    sa += pl[0][j]; sr += pl[1][j]; sg += pl[2][j]; sb += pl[3][j]
+                }
+                val i = y * w + x
+                res[0][i] = sa / taps; res[1][i] = sr / taps; res[2][i] = sg / taps; res[3][i] = sb / taps
+            }
+        }
+        fromPremulPlanes(res, out)
+    }
+
+    /**
+     * Recolor: the contiguous area around (tx,ty) whose colour is within [flood] of it takes [color],
+     * keeping each pixel's shading (brightness offset from the picked colour) and alpha.
+     */
+    private fun recolor(src: IntArray, out: IntArray, w: Int, h: Int, tx: Int, ty: Int, flood: Float, color: Int) {
+        src.copyInto(out)
+        val reg = FloodFill.region(src, w, h, tx.coerceIn(0, w - 1), ty.coerceIn(0, h - 1), flood, fringe = 1) ?: return
+        val seed = src[ty.coerceIn(0, h - 1) * w + tx.coerceIn(0, w - 1)]
+        val ls = 0.299f * r(seed) + 0.587f * g(seed) + 0.114f * b(seed)
+        val cr = r(color); val cg = g(color); val cb = b(color)
+        for (y in reg.bounds.top until reg.bounds.bottom) for (x in reg.bounds.left until reg.bounds.right) {
+            val i = y * w + x
+            val m = reg.mask[i].toInt() and 0xFF
+            if (m == 0) continue
+            val c = src[i]
+            val d = (0.299f * r(c) + 0.587f * g(c) + 0.114f * b(c)) - ls
+            val nr = (cr + d).toInt(); val ng = (cg + d).toInt(); val nb = (cb + d).toInt()
+            val t = m / 255f
+            out[i] = argb(a(c), (r(c) + (nr - r(c)) * t).toInt(), (g(c) + (ng - g(c)) * t).toInt(), (b(c) + (nb - b(c)) * t).toInt())
         }
     }
 

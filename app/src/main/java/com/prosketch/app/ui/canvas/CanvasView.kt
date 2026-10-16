@@ -372,6 +372,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
                 linePaint.pathEffect = null
             }
             Mode.TRANSFORM -> drawTransform(canvas)
+            Mode.ADJUST -> drawAdjustOverlay(canvas)
             Mode.LIQUIFY -> {
                 val lq = editor.adjustTool.liquify ?: return
                 val pos = hoverPos ?: lastToolPos ?: return
@@ -913,6 +914,109 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
     private var lassoDragging = false
     private var momentumVx = 0f; private var momentumVy = 0f
 
+    // ---- adjustments: focal disc, clone source, recolor crosshair, pencil strokes, swipe
+    private var adjDrag = 0          // 0 swipe, 1 focal, 2 clone disc, 3 crosshair, 4 paint, 5 drag vector
+    private var adjDown = PointF()
+    private var adjDownTime = 0L
+    private var adjMoved = false
+
+    private fun nearScreen(p: PointF?, x: Float, y: Float, r: Float): Boolean {
+        p ?: return false
+        val s = toScreen(p.x, p.y)
+        return hypot(s.x - x, s.y - y) < r
+    }
+
+    private fun adjustDown(x: Float, y: Float, pressure: Float) {
+        val at = editor.adjustTool
+        val t = at.type ?: return
+        val d = toDoc(x, y)
+        adjDown = PointF(d.x, d.y); adjDownTime = SystemClock.uptimeMillis(); adjMoved = false
+        adjDrag = when {
+            t == AdjustmentType.CLONE && nearScreen(at.cloneSource, x, y, 44f * density) -> 2
+            t == AdjustmentType.CLONE -> { at.strokeDown(d.x, d.y, pressure, lastWasStylus, 1f / scale); 4 }
+            nearScreen(arrowEnd(), x, y, 30f * density) -> 6
+            nearScreen(at.focal(), x, y, 48f * density) -> 1
+            t == AdjustmentType.RECOLOR -> { at.setRecolorTarget(d.x, d.y); 3 }
+            at.pencil -> { at.strokeDown(d.x, d.y, pressure, lastWasStylus, 1f / scale); 4 }
+            at.usesDragVector() -> 5
+            else -> 0
+        }
+    }
+
+    private fun adjustMove(x: Float, y: Float, dxs: Float, pressure: Float, d: PointF) {
+        val at = editor.adjustTool
+        if (hypot(x - downX, y - downY) > 8f * density) adjMoved = true
+        when (adjDrag) {
+            1 -> at.setFocal(d.x, d.y)
+            2 -> at.moveCloneSource(PointF(d.x, d.y))
+            3 -> at.setRecolorTarget(d.x, d.y)
+            4 -> at.strokeMove(d.x, d.y, pressure, lastWasStylus)
+            5 -> at.dragVector(d.x - adjDown.x, d.y - adjDown.y)
+            6 -> at.focal()?.let { f -> at.setParam("angle", ((Math.toDegrees(atan2(d.y - f.y, d.x - f.x).toDouble()).toFloat() + 360f) % 360f)) }
+            else -> at.dragPrimary(dxs / width)
+        }
+    }
+
+    /** Directional perspective blur: document position of the arrow handle. */
+    private fun arrowEnd(): PointF? {
+        val at = editor.adjustTool
+        if (at.type != AdjustmentType.PERSPECTIVE_BLUR || (at.params["mode"] ?: 0f) < 0.5f) return null
+        val f = at.focal() ?: return null
+        val a = Math.toRadians((at.params["angle"] ?: 0f).toDouble())
+        val len = 34f * density * 2.2f / scale
+        return PointF(f.x + cos(a).toFloat() * len, f.y + sin(a).toFloat() * len)
+    }
+
+    private fun adjustUp() {
+        val at = editor.adjustTool
+        when (adjDrag) {
+            4 -> at.strokeUp()
+            2 -> if (!adjMoved && SystemClock.uptimeMillis() - adjDownTime > 450) {
+                at.cloneLocked = !at.cloneLocked
+                editor.hud(if (at.cloneLocked) "복제 소스 고정" else "복제 소스 고정 해제")
+            }
+        }
+        adjDrag = 0
+    }
+
+    private fun drawAdjustOverlay(canvas: Canvas) {
+        val at = editor.adjustTool
+        val t = at.type ?: return
+        linePaint.pathEffect = null
+        at.focal()?.let { f ->
+            val s = toScreen(f.x, f.y)
+            val r = 34f * density
+            fillPaint.color = 0x332F8CFF; canvas.drawCircle(s.x, s.y, r, fillPaint)
+            linePaint.color = Color.WHITE; linePaint.strokeWidth = 2.5f * density; canvas.drawCircle(s.x, s.y, r, linePaint)
+            linePaint.color = 0x99000000.toInt(); linePaint.strokeWidth = 1f * density; canvas.drawCircle(s.x, s.y, r + 2f * density, linePaint)
+            if (t == AdjustmentType.PERSPECTIVE_BLUR && (at.params["mode"] ?: 0f) >= 0.5f) {
+                val e = arrowEnd()!!.let { toScreen(it.x, it.y) }
+                val ex = e.x; val ey = e.y
+                linePaint.color = Color.WHITE; linePaint.strokeWidth = 3f * density
+                canvas.drawLine(s.x, s.y, ex, ey, linePaint)
+                handle(canvas, ex, ey, accent, 7f * density)
+            }
+        }
+        if (t == AdjustmentType.CLONE) at.cloneSource?.let { c ->
+            val s = toScreen(c.x, c.y)
+            val r = 30f * density
+            linePaint.color = if (at.cloneLocked) accent else Color.WHITE; linePaint.strokeWidth = 3f * density
+            canvas.drawCircle(s.x, s.y, r, linePaint)
+            linePaint.color = 0x99000000.toInt(); linePaint.strokeWidth = 1f * density; canvas.drawCircle(s.x, s.y, r + 2.5f * density, linePaint)
+            linePaint.color = Color.WHITE; linePaint.strokeWidth = 1.5f * density
+            canvas.drawLine(s.x - r * 0.5f, s.y, s.x + r * 0.5f, s.y, linePaint); canvas.drawLine(s.x, s.y - r * 0.5f, s.x, s.y + r * 0.5f, linePaint)
+        }
+        at.recolorTarget()?.let { p ->
+            val s = toScreen(p.x, p.y)
+            val r = 22f * density
+            fillPaint.color = editor.color; canvas.drawCircle(s.x, s.y, r * 0.55f, fillPaint)
+            linePaint.color = Color.WHITE; linePaint.strokeWidth = 2.5f * density
+            canvas.drawCircle(s.x, s.y, r, linePaint)
+            canvas.drawLine(s.x - r * 1.7f, s.y, s.x - r, s.y, linePaint); canvas.drawLine(s.x + r, s.y, s.x + r * 1.7f, s.y, linePaint)
+            canvas.drawLine(s.x, s.y - r * 1.7f, s.x, s.y - r, linePaint); canvas.drawLine(s.x, s.y + r, s.x, s.y + r * 1.7f, linePaint)
+        }
+    }
+
     private fun toolDown(x: Float, y: Float, pressure: Float) {
         toolLastX = x; toolLastY = y
         lastToolPos = PointF(x, y)
@@ -934,6 +1038,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
             }
             Mode.TRANSFORM -> transformDown(x, y)
             Mode.LIQUIFY -> { editor.adjustTool.syncLiquify(); momentumVx = 0f; momentumVy = 0f }
+            Mode.ADJUST -> adjustDown(x, y, pressure)
             Mode.GUIDE_EDIT -> guideDown(x, y)
             Mode.PAINT -> if (editor.continueFill) { /* handled on up */ }
             else -> {}
@@ -965,7 +1070,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
                 lq.stroke(d.x, d.y, d.x - prevD.x, d.y - prevD.y, pressure)
                 momentumVx = d.x - prevD.x; momentumVy = d.y - prevD.y
             }
-            Mode.ADJUST -> editor.adjustTool.dragPrimary(dxs / width)
+            Mode.ADJUST -> adjustMove(x, y, dxs, pressure, d)
             Mode.GUIDE_EDIT -> guideMove(d, prevD, x, y)
             else -> {}
         }
@@ -987,6 +1092,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
                 }
             }
             Mode.LIQUIFY -> startMomentum()
+            Mode.ADJUST -> adjustUp()
             Mode.TRANSFORM -> { tfHit = -1; editor.transformTool.changed() }
             Mode.PAINT -> if (editor.continueFill && tap) { val d = toDoc(downX, downY); editor.colorDropCommit(d.x, d.y, true) }
             else -> {}
@@ -1001,6 +1107,8 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
         st.dragRect = null
         if (lassoDragging) st.lasso.clear()
         tfHit = -1
+        if (adjDrag == 4) editor.adjustTool.strokeCancel()
+        adjDrag = 0
         invalidate()
     }
 
