@@ -9,7 +9,7 @@ import org.json.JSONObject
 import java.io.File
 
 enum class FingerMode(val label: String) { AUTO("S펜 사용 시 손가락은 이동만"), PAINT("손가락으로 그리기"), NONE("손가락으로 그리지 않기") }
-enum class PenButtonAction(val label: String) { ERASER("누르는 동안 지우개"), EYEDROPPER("스포이드"), UNDO("실행 취소"), NONE("동작 없음") }
+enum class PenButtonAction(val label: String) { ERASER("누르는 동안 지우개"), EYEDROPPER("스포이드"), UNDO("실행 취소"), QUICKMENU("QuickMenu"), NONE("동작 없음") }
 
 class Prefs(ctx: Context) {
     private val sp: SharedPreferences = ctx.getSharedPreferences("prosketch", Context.MODE_PRIVATE)
@@ -42,6 +42,11 @@ class Prefs(ctx: Context) {
     var pressureSmoothing: Float get() = f("pressureSmoothing", 0.15f); set(v) = put { putFloat("pressureSmoothing", v) }
     var sidebarOffset: Float get() = f("sidebarOffset", 0.42f); set(v) = put { putFloat("sidebarOffset", v) }
     var colorDropThreshold: Float get() = f("colorDropThreshold", 0.3f); set(v) = put { putFloat("colorDropThreshold", v) }
+    /** ColorDrop gap closing in canvas pixels (0 = off): fills line art with small gaps without leaking. */
+    var colorDropGap: Int get() = sp.getInt("colorDropGap", 0); set(v) = put { putInt("colorDropGap", v) }
+    /** QuickMenu trigger: 0 off, 1 finger touch-and-hold (instead of the eyedropper), 2 S Pen button. */
+    var quickMenuGesture: Int get() = sp.getInt("quickMenuGesture", 0); set(v) = put { putInt("quickMenuGesture", v) }
+    var quickMenuActions: String get() = sp.getString("quickMenuActions", "")!!; set(v) = put { putString("quickMenuActions", v) }
     var autoSelectThreshold: Float get() = f("autoSelectThreshold", 0.25f); set(v) = put { putFloat("autoSelectThreshold", v) }
     var lastColorTab: Int get() = sp.getInt("lastColorTab", 0); set(v) = put { putInt("lastColorTab", v) }
     var harmonyMode: Int get() = sp.getInt("harmonyMode", 0); set(v) = put { putInt("harmonyMode", v) }

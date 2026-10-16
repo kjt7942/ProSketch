@@ -144,10 +144,77 @@ object FloodFill {
         return max(max(abs(a1 - a2), abs(r1 - r2)), max(abs(g1 - g2), abs(b1 - b2)))
     }
 
-    fun region(ref: IntArray, w: Int, h: Int, sx: Int, sy: Int, threshold: Float, fringe: Int = 2): Region? {
+    /**
+     * Two-pass chamfer (3-4) distance to the nearest "wall" pixel, in 1/3 px units, capped at [cap] px.
+     */
+    private fun wallDistance(wall: BooleanArray, w: Int, h: Int, cap: Int): IntArray {
+        val inf = (cap + 2) * 3
+        val d = IntArray(w * h) { if (wall[it]) 0 else inf }
+        for (y in 0 until h) for (x in 0 until w) {
+            val i = y * w + x
+            var v = d[i]
+            if (v == 0) continue
+            if (x > 0) v = min(v, d[i - 1] + 3)
+            if (y > 0) {
+                v = min(v, d[i - w] + 3)
+                if (x > 0) v = min(v, d[i - w - 1] + 4)
+                if (x < w - 1) v = min(v, d[i - w + 1] + 4)
+            }
+            d[i] = v
+        }
+        for (y in h - 1 downTo 0) for (x in w - 1 downTo 0) {
+            val i = y * w + x
+            var v = d[i]
+            if (v == 0) continue
+            if (x < w - 1) v = min(v, d[i + 1] + 3)
+            if (y < h - 1) {
+                v = min(v, d[i + w] + 3)
+                if (x < w - 1) v = min(v, d[i + w + 1] + 4)
+                if (x > 0) v = min(v, d[i + w - 1] + 4)
+            }
+            d[i] = v
+        }
+        return d
+    }
+
+    /**
+     * Flood region from (sx, sy). [gap] > 0 closes gaps in line art up to that many pixels: walls are
+     * thickened by half the gap, the area is filled, then grown back so it still reaches the lines.
+     */
+    fun region(ref: IntArray, w: Int, h: Int, sx: Int, sy: Int, threshold: Float, fringe: Int = 2, gap: Int = 0): Region? {
         if (sx !in 0 until w || sy !in 0 until h) return null
         val seed = ref[sy * w + sx]
         val limit = (threshold.coerceIn(0f, 0.976f) * 255f).toInt()
+        if (gap > 1) {
+            val half = (gap + 1) / 2   // thickening every wall by half the gap closes gaps up to [gap]
+            val wall = BooleanArray(w * h) { premulDiff(ref[it], seed) > limit }
+            val dist = wallDistance(wall, w, h, half)
+            val blocked = half * 3
+            if (dist[sy * w + sx] > blocked) {
+                // fill the thinned area (walls + gap band blocked)
+                // blocked pixels get a value whose alpha differs from the seed by ≥ 128
+                val other = if ((seed ushr 24) > 127) 0 else 0xFF000000.toInt()
+                val thin = IntArray(w * h) { if (dist[it] > blocked) seed else other }
+                val core = region(thin, w, h, sx, sy, 0f, 0) ?: return null
+                // grow back by gap px, but never into the original walls
+                val inRegion = BooleanArray(w * h) { core.mask[it].toInt() != 0 }
+                // √2·half reaches back into right-angle corners that the thinning rounded off
+                val reach = (half * 1.45f).toInt() + 1
+                val back = wallDistance(inRegion, w, h, reach)
+                val grow = reach * 3
+                val mask = ByteArray(w * h)
+                var minX = w; var minY = h; var maxX = -1; var maxY = -1
+                for (y in 0 until h) for (x in 0 until w) {
+                    val i = y * w + x
+                    if (back[i] <= grow && !wall[i]) {
+                        mask[i] = 255.toByte()
+                        if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y
+                    }
+                }
+                if (maxX < 0) return null
+                return grow(mask, w, h, minX, minY, maxX, maxY, fringe)
+            }
+        }
         val mask = ByteArray(w * h)
         val stack = IntArray(w * h / 4 + 1024)
         var sp = 0
@@ -184,7 +251,12 @@ object FloodFill {
             if (y < minY) minY = y
             if (y > maxY) maxY = y
         }
-        // fringe: grow by N pixels to fill under anti-aliased line edges
+        return grow(mask, w, h, minX, minY, maxX, maxY, fringe)
+    }
+
+    /** Fringe: grows the region by [fringe] px (marked 128) to fill under anti-aliased line edges. */
+    private fun grow(mask: ByteArray, w: Int, h: Int, minX0: Int, minY0: Int, maxX0: Int, maxY0: Int, fringe: Int): Region {
+        var minX = minX0; var minY = minY0; var maxX = maxX0; var maxY = maxY0
         // each ring grows from the previous one (ring 0 grows from the core, marked -1 == 255)
         var from = -1
         for (pass in 0 until fringe) {

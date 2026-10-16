@@ -140,6 +140,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
     init {
         editor.invalidator = { postInvalidateOnAnimation() }
         editor.fitRequest = { post { fitToScreen() } }
+        editor.mirrorRequest = { invalidate() }
         isFocusable = true
         isFocusableInTouchMode = true
     }
@@ -196,8 +197,16 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
         canvas.drawBitmap(softCache!!, 0f, 0f, if (filter) Paint(Paint.FILTER_BITMAP_FLAG) else null)
     }
 
+    private val grayPaint = Paint().apply { colorFilter = android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix().apply { setSaturation(0f) }) }
+
     override fun onDraw(canvas: Canvas) {
         canvas.drawColor(surroundColor)
+        if (editor.mirrorView) { canvas.save(); canvas.scale(-1f, 1f, width / 2f, 0f) }
+        drawContent(canvas)
+        if (editor.mirrorView) canvas.restore()
+    }
+
+    private fun drawContent(canvas: Canvas) {
         val docRect = RectF(0f, 0f, doc.width.toFloat(), doc.height.toFloat())
         val filter = scale < 2.5f
 
@@ -211,8 +220,8 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
         canvas.save()
         canvas.concat(viewMatrix)
         canvas.clipRect(docRect)
-        val isolate = !doc.backgroundVisible
-        if (isolate) canvas.saveLayer(docRect, null)
+        val isolate = !doc.backgroundVisible || editor.grayscaleView
+        if (isolate) canvas.saveLayer(docRect, if (editor.grayscaleView) grayPaint else null)
 
         val items = doc.items()
         val activeTop = doc.activeLayer?.let { doc.topAncestor(it) }
@@ -540,7 +549,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
     }
 
     // ------------------------------------------------------------------ input
-    private enum class G { NONE, IGNORE, PENDING, STROKE, PAN, NAV, EYEDROPPER, TOOL, OPACITY }
+    private enum class G { NONE, IGNORE, PENDING, STROKE, PAN, NAV, EYEDROPPER, TOOL, OPACITY, QUICKMENU }
 
     private var g = G.NONE
     private var strokePointer = -1
@@ -566,10 +575,39 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
 
     private val holdEyedropper = Runnable {
         if (g == G.PENDING && editor.mode == Mode.PAINT) {
+            if (editor.prefs.quickMenuGesture == 1) { openQuickMenu(downX, downY); return@Runnable }
             g = G.EYEDROPPER
             dropperLayerOnly = false
             sampleAt(downX, downY)
         }
+    }
+
+    // ---- QuickMenu (coordinates handed to Compose are unmirrored screen px)
+    private fun unmirrorX(x: Float) = if (editor.mirrorView) width - x else x
+
+    private fun openQuickMenu(x: Float, y: Float) {
+        g = G.QUICKMENU
+        editor.quickMenuHover = -1
+        editor.quickMenuAt = PointF(unmirrorX(x), y)
+    }
+
+    private fun quickMenuMove(x: Float, y: Float) {
+        val c = editor.quickMenuAt ?: return
+        editor.quickMenuHover = com.prosketch.app.ui.editor.quickMenuIndexAt(c, unmirrorX(x), y, 56f * density)
+    }
+
+    private fun quickMenuUp() {
+        val i = editor.quickMenuHover
+        editor.quickMenuHover = -1
+        if (i >= 0) {
+            editor.quickMenuAt = null
+            com.prosketch.app.ui.editor.QuickAction.parse(editor.prefs.quickMenuActions)[i].run(editor)
+        }   // released on the centre: the menu stays open for tapping
+    }
+
+    /** Space bar / external triggers. */
+    fun toggleQuickMenu() {
+        editor.quickMenuAt = if (editor.quickMenuAt != null) null else PointF(width / 2f, height / 2f)
     }
     private val rapidUndo = object : Runnable {
         override fun run() {
@@ -605,7 +643,9 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
         return InputPoint(d.x, d.y, pr, tilt, ori, t)
     }
 
-    override fun onHoverEvent(e: MotionEvent): Boolean {
+    override fun onHoverEvent(ev: MotionEvent): Boolean = mirrored(ev) { e -> handleHover(e) }
+
+    private fun handleHover(e: MotionEvent): Boolean {
         if (isStylus(e, 0)) {
             editor.penDetected = true
             when (e.actionMasked) {
@@ -617,8 +657,21 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
         return super.onHoverEvent(e)
     }
 
+    private val mirrorMatrix = Matrix()
+
+    /** Mirror view flips the display; touches are flipped the same way so they land where they appear. */
+    private inline fun <T> mirrored(e: MotionEvent, block: (MotionEvent) -> T): T {
+        if (!editor.mirrorView) return block(e)
+        mirrorMatrix.setScale(-1f, 1f, width / 2f, 0f)
+        val m = MotionEvent.obtain(e)
+        m.transform(mirrorMatrix)
+        try { return block(m) } finally { m.recycle() }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
-    override fun onTouchEvent(e: MotionEvent): Boolean {
+    override fun onTouchEvent(ev: MotionEvent): Boolean = mirrored(ev) { e -> handleTouch(e) }
+
+    private fun handleTouch(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> onDown(e)
             MotionEvent.ACTION_POINTER_DOWN -> onPointerDown(e)
@@ -654,13 +707,14 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
                 PenButtonAction.ERASER -> eraserOverride = true
                 PenButtonAction.EYEDROPPER -> { g = G.EYEDROPPER; dropperLayerOnly = false; sampleAt(e.x, e.y); return }
                 PenButtonAction.UNDO -> { editor.undo(); g = G.IGNORE; return }
+                PenButtonAction.QUICKMENU -> { openQuickMenu(e.x, e.y); return }
                 PenButtonAction.NONE -> {}
             }
             startPrimary(e, 0, true)
         } else {
             eraserOverride = false
             g = G.PENDING
-            if (editor.mode == Mode.PAINT && editor.prefs.holdEyedropper && !editor.continueFill)
+            if (editor.mode == Mode.PAINT && (editor.prefs.holdEyedropper || editor.prefs.quickMenuGesture == 1) && !editor.continueFill)
                 postDelayed(holdEyedropper, (editor.prefs.holdEyedropperDelay * 1000).toLong())
         }
     }
@@ -768,6 +822,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
             }
             G.NAV -> navMove(e)
             G.EYEDROPPER -> sampleAt(e.x, e.y)
+            G.QUICKMENU -> quickMenuMove(e.x, e.y)
             G.TOOL -> {
                 val idx = e.findPointerIndex(strokePointer).coerceAtLeast(0)
                 for (h in 0 until e.historySize) toolMove(e.getHistoricalX(idx, h), e.getHistoricalY(idx, h), e.getHistoricalPressure(idx, h))
@@ -882,6 +937,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
                 dropperPos = null; dropperColor = null
             }
             G.OPACITY -> editor.layerOpacityTarget?.let { editor.commitOpacity(it); editor.layerOpacityTarget = null }
+            G.QUICKMENU -> if (!cancel) quickMenuUp()
             else -> {}
         }
         g = G.NONE

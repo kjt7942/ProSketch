@@ -37,6 +37,7 @@ import com.prosketch.app.ui.common.UI
 import com.prosketch.app.ui.common.UpdateDialog
 import com.prosketch.app.ui.editor.Editor
 import com.prosketch.app.ui.editor.Mode
+import com.prosketch.app.ui.editor.Panel
 import com.prosketch.app.ui.editor.Tool
 import com.prosketch.app.ui.editor.EditorScreen
 import com.prosketch.app.ui.gallery.GalleryScreen
@@ -119,35 +120,70 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Hardware keyboard shortcuts (Book Cover Keyboard etc.). */
+    /** Hardware keyboard shortcuts (Book Cover Keyboard etc.), following Procreate's keyboard table. */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val ed = editor ?: return super.dispatchKeyEvent(event)
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
-        // a focused text field (layer name, text tool, …) gets the key first; shortcuts only see the rest
-        if (super.dispatchKeyEvent(event)) return true
-        val ctrl = event.isCtrlPressed
+        // while a text field is focused (layer name, text tool, …) keys go to it, not to shortcuts
+        val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        if (imm.isAcceptingText) return super.dispatchKeyEvent(event)
+        val ctrl = event.isCtrlPressed || event.isMetaPressed
         val shift = event.isShiftPressed
+        val transforming = ed.mode == Mode.TRANSFORM && ed.transformTool.session != null
+        fun size(delta: Float) { ed.toolSize[ed.tool] = ((ed.toolSize[ed.tool] ?: 0.3f) + delta).coerceIn(0f, 1f); ed.hud("크기 ${((ed.toolSize[ed.tool] ?: 0f) * 100).toInt()}%") }
+        fun nudge(dx: Float, dy: Float): Boolean { if (!transforming) return false; val s = if (shift) 10f else 1f; ed.transformTool.nudge(dx * s, dy * s); return true }
         val handled = when (event.keyCode) {
             KeyEvent.KEYCODE_Z -> if (ctrl) { if (shift) ed.redo() else ed.undo(); true } else false
             KeyEvent.KEYCODE_Y -> if (ctrl) { ed.redo(); true } else false
-            KeyEvent.KEYCODE_B -> if (!ctrl) { ed.exitModes(); ed.tool = Tool.BRUSH; true } else false
-            KeyEvent.KEYCODE_S -> if (!ctrl) { ed.exitModes(); ed.tool = Tool.SMUDGE; true } else { ed.save(); ed.hud("저장됨"); true }
-            KeyEvent.KEYCODE_E -> if (!ctrl) { ed.exitModes(); ed.tool = Tool.ERASER; true } else false
-            KeyEvent.KEYCODE_LEFT_BRACKET -> { ed.toolSize[ed.tool] = ((ed.toolSize[ed.tool] ?: 0.3f) - 0.03f).coerceIn(0f, 1f); true }
-            KeyEvent.KEYCODE_RIGHT_BRACKET -> { ed.toolSize[ed.tool] = ((ed.toolSize[ed.tool] ?: 0.3f) + 0.03f).coerceIn(0f, 1f); true }
+            KeyEvent.KEYCODE_B -> when {
+                ctrl -> { ed.adjustTool.begin(com.prosketch.app.engine.AdjustmentType.COLOR_BALANCE); true }
+                else -> { ed.selectTool(Tool.BRUSH); true }
+            }
+            KeyEvent.KEYCODE_E -> if (!ctrl) { ed.selectTool(Tool.ERASER); true } else false
+            KeyEvent.KEYCODE_S -> when {
+                ctrl -> { ed.save(); ed.hud("저장됨"); true }
+                shift -> { ed.selectTool(Tool.SMUDGE); true }
+                else -> { if (ed.mode == Mode.SELECT) ed.exitModes() else ed.selectionTool.begin(); true }
+            }
+            KeyEvent.KEYCODE_V -> when {
+                ctrl -> { ed.paste(); true }
+                else -> { if (ed.mode == Mode.TRANSFORM) ed.transformTool.commit() else { ed.exitModes(); ed.transformTool.begin() }; true }
+            }
+            KeyEvent.KEYCODE_X -> if (ctrl) { ed.cut(); true } else { ed.swapWithPrevious(); true }
+            KeyEvent.KEYCODE_C -> if (ctrl) { ed.copy(); true } else { ed.panel = if (ed.panel == Panel.COLOR) null else Panel.COLOR; true }
+            KeyEvent.KEYCODE_A -> if (ctrl) { ed.copy(all = true); true } else false
+            KeyEvent.KEYCODE_J -> if (ctrl) { ed.duplicateLayer(ed.doc.activeIndex); true } else false
+            KeyEvent.KEYCODE_U -> if (ctrl) { ed.adjustTool.begin(com.prosketch.app.engine.AdjustmentType.HSB); true } else false
+            KeyEvent.KEYCODE_DEL, KeyEvent.KEYCODE_FORWARD_DEL -> if (ctrl) { ed.clearLayer(); true } else false
+            KeyEvent.KEYCODE_LEFT_BRACKET -> { size(if (ctrl) -0.01f else if (shift) -0.10f else -0.05f); true }
+            KeyEvent.KEYCODE_RIGHT_BRACKET -> { size(if (ctrl) 0.01f else if (shift) 0.10f else 0.05f); true }
             KeyEvent.KEYCODE_0 -> if (ctrl) { canvasView?.fitToScreen(); true } else false
             KeyEvent.KEYCODE_EQUALS, KeyEvent.KEYCODE_PLUS -> if (ctrl) { canvasView?.zoomBy(1.25f); true } else false
             KeyEvent.KEYCODE_MINUS -> if (ctrl) { canvasView?.zoomBy(0.8f); true } else false
-            KeyEvent.KEYCODE_C -> if (ctrl) { ed.copy(); true } else false
-            KeyEvent.KEYCODE_X -> if (ctrl) { ed.cut(); true } else false
-            KeyEvent.KEYCODE_V -> if (ctrl) { ed.paste(); true } else false
             KeyEvent.KEYCODE_D -> if (ctrl) { ed.clearSelection(); true } else false
             KeyEvent.KEYCODE_T -> if (ctrl) { ed.exitModes(); ed.transformTool.begin(); true } else false
-            KeyEvent.KEYCODE_L -> { ed.panel = if (ed.panel == com.prosketch.app.ui.editor.Panel.LAYERS) null else com.prosketch.app.ui.editor.Panel.LAYERS; true }
-            KeyEvent.KEYCODE_ESCAPE -> { if (ed.panel != null) ed.panel = null else if (ed.mode != Mode.PAINT) ed.exitModes(); true }
+            KeyEvent.KEYCODE_L -> { ed.panel = if (ed.panel == Panel.LAYERS) null else Panel.LAYERS; true }
+            KeyEvent.KEYCODE_K -> if (ctrl) { ed.panel = if (ed.panel == Panel.ACTIONS) null else Panel.ACTIONS; true } else false
+            KeyEvent.KEYCODE_H -> if (ctrl) { ed.panel = if (ed.panel == Panel.HISTORY) null else Panel.HISTORY; true } else false
+            KeyEvent.KEYCODE_M -> if (!ctrl) { ed.toggleMirrorView(); true } else false
+            KeyEvent.KEYCODE_G -> if (ctrl) { ed.createGroup(); true } else if (!ctrl) { ed.toggleGrayscaleView(); true } else false
+            KeyEvent.KEYCODE_SPACE -> { canvasView?.toggleQuickMenu(); true }
+            KeyEvent.KEYCODE_DPAD_LEFT -> nudge(-1f, 0f)
+            KeyEvent.KEYCODE_DPAD_RIGHT -> nudge(1f, 0f)
+            KeyEvent.KEYCODE_DPAD_UP -> nudge(0f, -1f)
+            KeyEvent.KEYCODE_DPAD_DOWN -> nudge(0f, 1f)
+            KeyEvent.KEYCODE_ESCAPE -> {
+                when {
+                    ed.quickMenuAt != null -> ed.quickMenuAt = null
+                    ed.textEditing != null -> ed.endTextEdit(false)
+                    ed.panel != null -> ed.panel = null
+                    ed.mode != Mode.PAINT -> ed.exitModes()
+                }
+                true
+            }
             KeyEvent.KEYCODE_ENTER -> if (ed.mode != Mode.PAINT) { ed.exitModes(); true } else false
             else -> false
         }
-        return handled
+        return handled || super.dispatchKeyEvent(event)
     }
 }

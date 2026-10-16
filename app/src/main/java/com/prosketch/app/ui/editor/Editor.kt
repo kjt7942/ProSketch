@@ -78,7 +78,7 @@ import kotlin.math.sin
 
 enum class Tool(val label: String) { BRUSH("페인트"), SMUDGE("문지르기"), ERASER("지우기") }
 enum class Mode { PAINT, SELECT, TRANSFORM, ADJUST, LIQUIFY, GUIDE_EDIT }
-enum class Panel { BRUSHES, LAYERS, COLOR, ACTIONS, ADJUSTMENTS, BRUSH_STUDIO }
+enum class Panel { BRUSHES, LAYERS, COLOR, ACTIONS, ADJUSTMENTS, BRUSH_STUDIO, HISTORY }
 
 class Hud(val text: String, val time: Long = SystemClock.uptimeMillis(), val action: Pair<String, () -> Unit>? = null)
 
@@ -129,6 +129,28 @@ class Editor(
     var zoomText by mutableStateOf<String?>(null)
     /** Secondary layer selection (swipe right in the layers panel); the primary is [Document.activeLayer]. */
     val secondary = mutableStateListOf<Long>()
+    /** QuickMenu centre (screen px) while open, and the button under the finger. */
+    var quickMenuAt by mutableStateOf<PointF?>(null)
+    var quickMenuHover by mutableIntStateOf(-1)
+    /** View-only aids: mirrored display (checks proportions) and greyscale display (checks values). */
+    var mirrorView by mutableStateOf(false)
+    var grayscaleView by mutableStateOf(false)
+    var mirrorRequest: ((Boolean) -> Unit)? = null
+
+    fun toggleMirrorView() { mirrorView = !mirrorView; mirrorRequest?.invoke(mirrorView); hud(if (mirrorView) "좌우 반전 보기 (그림은 그대로)" else "좌우 반전 보기 끔") }
+    fun toggleGrayscaleView() { grayscaleView = !grayscaleView; invalidate(); hud(if (grayscaleView) "흑백 보기: 명암 확인" else "흑백 보기 끔") }
+
+    /** Undo or redo until [doneCount] steps remain done (history panel). */
+    fun jumpHistory(doneCount: Int) {
+        if (strokeActive) cancelStroke()
+        if (mode != Mode.PAINT) exitModes()
+        var guard = 300
+        while (history.size > doneCount && guard-- > 0) history.undo() ?: break
+        while (history.size < doneCount && guard-- > 0) history.redo() ?: break
+        hud("작업 내역: ${history.size}단계")
+        bump()
+    }
+
     /** Text layer whose words are being edited in the text dialog. */
     var textEditing by mutableStateOf<Layer?>(null)
 
@@ -553,11 +575,12 @@ class Editor(
         val ref = fillRef ?: return
         val job = ++fillJob
         val th = fillThreshold
+        val gap = prefs.colorDropGap
         val c = paintColorFor(layer)
         val sel = selection?.let { SelectionOps.toBytes(it) }
         val w = doc.width; val h = doc.height
         scope.launch(Dispatchers.Default) {
-            val region = FloodFill.region(ref, w, h, pt.x.toInt(), pt.y.toInt(), th) ?: return@launch
+            val region = FloodFill.region(ref, w, h, pt.x.toInt(), pt.y.toInt(), th, gap = gap) ?: return@launch
             val px = IntArray(w * h)
             layer.bitmap.getPixels(px, 0, w, 0, 0, w, h)
             FloodFill.applyFill(px, w, region, c, sel, layer.alphaLock)
@@ -580,7 +603,7 @@ class Editor(
             val layer = doc.active!!
             val ref = fillRef ?: referencePixels()
             val w = doc.width; val h = doc.height
-            val region = FloodFill.region(ref, w, h, x.toInt(), y.toInt(), fillThreshold) ?: run { endFill(); return }
+            val region = FloodFill.region(ref, w, h, x.toInt(), y.toInt(), fillThreshold, gap = prefs.colorDropGap) ?: run { endFill(); return }
             val px = IntArray(w * h)
             layer.bitmap.getPixels(px, 0, w, 0, 0, w, h)
             FloodFill.applyFill(px, w, region, paintColorFor(layer), selection?.let { SelectionOps.toBytes(it) }, layer.alphaLock)
@@ -1236,7 +1259,7 @@ class Editor(
     fun cutAndPaste() { if (doc.active?.isGroup == true) { hud("그룹은 잘라낼 수 없습니다"); return }; if (copy()) { clearLayer(); paste("선택에서") } }
 
     // ------------------------------------------------------------------ insert / text
-    fun insertImage(src: Bitmap, name: String = "삽입된 이미지") {
+    fun insertImage(src: Bitmap, name: String = "삽입된 이미지", private: Boolean = false) {
         if (!checkLayerLimit()) return
         val s = min(1f, min(doc.width / src.width.toFloat(), doc.height / src.height.toFloat()))
         val w = max(1, (src.width * s).toInt()); val h = max(1, (src.height * s).toInt())
@@ -1244,6 +1267,7 @@ class Editor(
         val l = Layer.blank(doc.width, doc.height, name)
         Canvas(l.bitmap).drawBitmap(src, null, placed, Paint(Paint.FILTER_BITMAP_FLAG))
         exitModes()
+        l.isPrivate = private
         addLayer(l, name) ?: return
         transformTool.begin()
     }

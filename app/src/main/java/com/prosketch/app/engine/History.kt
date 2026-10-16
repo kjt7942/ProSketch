@@ -135,6 +135,10 @@ class History(private val host: HistoryHost, private val budgetBytes: Long, priv
 
     fun clear() { undoStack.clear(); redoStack.clear(); listener?.invoke() }
 
+    /** Labels of the done steps, oldest first, and of the undone steps, next-to-redo first. */
+    fun undoLabels(): List<String> = undoStack.map { it.label }
+    fun redoLabels(): List<String> = redoStack.reversed().map { it.label }
+
     private fun trim() {
         var total = undoStack.sumOf { it.bytes }
         while (undoStack.size > 1 && (total > budgetBytes || undoStack.size > maxSteps)) {

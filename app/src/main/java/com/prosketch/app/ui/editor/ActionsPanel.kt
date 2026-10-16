@@ -126,6 +126,16 @@ fun ActionsPanel(ed: Editor, modifier: Modifier = Modifier) {
     val photo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) decodeUri(ctx, uri, maxOf(ed.doc.width, ed.doc.height))?.let { ed.insertImage(it); it.recycle() } ?: ed.hud("이미지를 열 수 없습니다")
     }
+    val privatePhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) decodeUri(ctx, uri, maxOf(ed.doc.width, ed.doc.height))?.let { ed.insertImage(it, "비공개 사진", private = true); it.recycle() } ?: ed.hud("이미지를 열 수 없습니다")
+    }
+    val fileInsert = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) decodeUri(ctx, uri, maxOf(ed.doc.width, ed.doc.height))?.let { ed.insertImage(it, "삽입된 파일"); it.recycle() } ?: ed.hud("이미지를 열 수 없습니다")
+    }
+    val cameraFile = remember { java.io.File(ctx.cacheDir, "camera").apply { mkdirs() }.let { java.io.File(it, "photo.jpg") } }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        if (ok) decodeUri(ctx, android.net.Uri.fromFile(cameraFile), maxOf(ed.doc.width, ed.doc.height))?.let { ed.insertImage(it, "사진"); it.recycle() }
+    }
     val refPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) decodeUri(ctx, uri, 1200)?.let { ed.referenceImage = it; ed.referenceVisible = true }
     }
@@ -137,6 +147,13 @@ fun ActionsPanel(ed: Editor, modifier: Modifier = Modifier) {
             when (tab) {
                 0 -> {
                     MenuRow("사진 삽입", Icons.Filled.Image) { ed.panel = null; photo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                    MenuRow("파일 삽입", Icons.Filled.Image, sub = "PNG · JPEG · WEBP") { ed.panel = null; fileInsert.launch(arrayOf("image/*")) }
+                    MenuRow("사진 찍기", Icons.Filled.Image) {
+                        ed.panel = null
+                        val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", cameraFile)
+                        runCatching { camera.launch(uri) }.onFailure { ed.hud("카메라 앱을 열 수 없습니다") }
+                    }
+                    MenuRow("비공개 사진 삽입", Icons.Filled.Image, sub = "타임랩스와 갤러리 미리보기에서 제외") { ed.panel = null; privatePhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
                     MenuRow("텍스트 추가", Icons.Filled.TextFields) { ed.startNewText() }
                     MenuRow("잘라내기", Icons.Filled.ContentCut) { ed.cut() }
                     MenuRow("복사", Icons.Filled.ContentCopy) { ed.copy() }
@@ -153,15 +170,21 @@ fun ActionsPanel(ed: Editor, modifier: Modifier = Modifier) {
                     MenuRow("캔버스 수평 뒤집기", Icons.Filled.Flip) { ed.flipCanvas(true) }
                     MenuRow("캔버스 수직 뒤집기", Icons.Filled.Flip) { ed.flipCanvas(false) }
                     MenuRow("캔버스 정보", Icons.Filled.Info) { infoDialog = true }
+                    SectionLabel("보기")
+                    SwitchRow("좌우 반전 보기", ed.mirrorView, "그림은 그대로 두고 화면만 뒤집어 비율 확인 (M)") { if (it != ed.mirrorView) ed.toggleMirrorView() }
+                    SwitchRow("흑백 보기", ed.grayscaleView, "명암(밸류) 확인용, 내보내기에는 영향 없음 (G)") { if (it != ed.grayscaleView) ed.toggleGrayscaleView() }
+                    MenuRow("작업 내역", Icons.Filled.Info, sub = "실행 취소 단계를 목록으로 보고 원하는 단계로 이동 (Ctrl+H)") { ed.panel = Panel.HISTORY }
                 }
                 2 -> {
                     SectionLabel("이미지 공유")
-                    listOf(ExportFormat.PROSKETCH, ExportFormat.PSD, ExportFormat.PDF, ExportFormat.JPEG, ExportFormat.PNG).forEach { f ->
+                    listOf(ExportFormat.PROSKETCH, ExportFormat.PSD, ExportFormat.PDF, ExportFormat.JPEG, ExportFormat.PNG, ExportFormat.TIFF).forEach { f ->
                         MenuRow(f.label, Icons.Filled.Share, sub = if (f == ExportFormat.PSD) "레이어 유지 · 포토샵 호환" else null) { runExport(ed, f, false) }
                     }
                     SectionLabel("레이어 공유")
                     MenuRow(ExportFormat.LAYERS_PNG.label, Icons.Filled.Share) { runExport(ed, ExportFormat.LAYERS_PNG, false) }
+                    MenuRow(ExportFormat.LAYERS_PDF.label, Icons.Filled.Share) { runExport(ed, ExportFormat.LAYERS_PDF, false) }
                     MenuRow(ExportFormat.GIF.label, Icons.Filled.Share, sub = "애니메이션 어시스트 프레임") { runExport(ed, ExportFormat.GIF, false) }
+                    MenuRow(ExportFormat.APNG.label, Icons.Filled.Share, sub = "투명 배경 유지") { runExport(ed, ExportFormat.APNG, false) }
                     MenuRow(ExportFormat.MP4.label, Icons.Filled.Share) { runExport(ed, ExportFormat.MP4, false) }
                     SectionLabel("기기에 저장")
                     MenuRow("갤러리에 PNG 저장", Icons.Filled.SaveAlt) { runExport(ed, ExportFormat.PNG, true) }
@@ -203,6 +226,10 @@ private fun PrefsView(ed: Editor) {
     SwitchRow("브러시 커서", p.brushCursor, "S펜 호버/그리는 중 브러시 외곽선 표시") { ch { p.brushCursor = it } }
     SwitchRow("화면 기준 브러시 크기", p.screenRelativeBrush, "끄면 캔버스 기준(확대하면 브러시도 커짐)") { ch { p.screenRelativeBrush = it } }
     LabeledSlider("선택 마스크 가시성", p.selectionMaskOpacity, 0f..1f, "${(p.selectionMaskOpacity * 100).roundToInt()}%", { ch { p.selectionMaskOpacity = it } })
+    SectionLabel("ColorDrop 채우기")
+    LabeledSlider("틈 닫기 (최대 틈 크기)", p.colorDropGap.toFloat(), 0f..100f, if (p.colorDropGap == 0) "끔" else "${p.colorDropGap}px",
+        { ch { p.colorDropGap = it.roundToInt() } })
+    Text("선화에 작은 틈이 있어도 바깥으로 새지 않고 채웁니다. 선에서 틈 크기만큼 안쪽까지 채운 뒤 다시 선 아래로 넓힙니다.", color = UI.text2, fontSize = 11.sp)
     SectionLabel("S펜 및 손가락")
     Text("손가락 입력", color = UI.text, fontSize = 13.sp)
     Column { FingerMode.entries.forEach { m -> Row(Modifier.fillMaxWidth().clickable { ch { p.fingerMode = m } }.padding(vertical = 5.dp)) {
@@ -211,6 +238,10 @@ private fun PrefsView(ed: Editor) {
     Text("S펜 버튼", color = UI.text, fontSize = 13.sp)
     Column { PenButtonAction.entries.forEach { m -> Row(Modifier.fillMaxWidth().clickable { ch { p.penButton = m } }.padding(vertical = 5.dp)) {
         Text((if (p.penButton == m) "● " else "○ ") + m.label, color = if (p.penButton == m) UI.accent else UI.text, fontSize = 13.sp) } } }
+    SectionLabel("QuickMenu")
+    SwitchRow("손가락으로 길게 눌러 QuickMenu 열기", p.quickMenuGesture == 1, "켜면 길게 누르기 스포이드 대신 열립니다 · 키보드 Space · S펜 버튼에도 지정 가능") {
+        ch { p.quickMenuGesture = if (it) 1 else 0 }
+    }
     SectionLabel("압력 곡선")
     PressureCurveEditor(ed)
     SectionLabel("제스처")

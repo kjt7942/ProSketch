@@ -77,6 +77,7 @@ fun EditorScreen(ed: Editor, onCanvasView: (CanvasView) -> Unit, onExit: () -> U
 
     BackHandler {
         when {
+            ed.quickMenuAt != null -> ed.quickMenuAt = null
             ed.textEditing != null -> ed.endTextEdit(true)
             ed.panel != null -> ed.panel = null
             ed.mode != Mode.PAINT -> ed.exitModes()
@@ -131,9 +132,17 @@ fun EditorScreen(ed: Editor, onCanvasView: (CanvasView) -> Unit, onExit: () -> U
                 Panel.COLOR -> ColorPanel(ed, top.align(Alignment.TopEnd).width(380.dp))
                 Panel.ACTIONS -> ActionsPanel(ed, top.align(Alignment.TopStart).width(470.dp))
                 Panel.ADJUSTMENTS -> AdjustmentsMenu(ed, top.align(Alignment.TopStart).padding(start = 40.dp).width(300.dp))
+                Panel.HISTORY -> HistoryPanel(ed, top.align(Alignment.TopStart).padding(start = 40.dp).width(340.dp))
             }
         }
 
+        QuickMenuOverlay(ed)
+        if (ed.mirrorView || ed.grayscaleView) {
+            Row(Modifier.align(Alignment.BottomEnd).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (ed.mirrorView) Pill("좌우 반전 보기", Modifier.clickable { ed.toggleMirrorView() })
+                if (ed.grayscaleView) Pill("흑백 보기", Modifier.clickable { ed.toggleGrayscaleView() })
+            }
+        }
         Hud(ed, Modifier.align(Alignment.TopCenter).padding(top = 60.dp))
         ed.zoomText?.let { Pill(it, Modifier.align(Alignment.TopCenter).padding(top = 100.dp)) }
         ed.busy?.let { BusyOverlay(it) }
