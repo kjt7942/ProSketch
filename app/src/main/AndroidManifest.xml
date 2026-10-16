@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-
     <uses-feature android:name="android.hardware.touchscreen.multitouch" android:required="false" />
 
     <application
@@ -15,6 +12,9 @@
         android:hardwareAccelerated="true"
         android:resizeableActivity="true"
         android:supportsRtl="true"
+        android:enableOnBackInvokedCallback="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:theme="@style/Theme.ProSketch">
         <activity
             android:name=".MainActivity"

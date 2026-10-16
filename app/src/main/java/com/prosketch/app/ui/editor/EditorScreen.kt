@@ -1,5 +1,7 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.L
+
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -112,7 +114,7 @@ fun EditorScreen(ed: Editor, onCanvasView: (CanvasView) -> Unit, onExit: () -> U
         } else {
             Box(Modifier.align(Alignment.TopStart).padding(10.dp).size(36.dp).clip(RoundedCornerShape(10.dp)).background(Color(0x66000000))
                 .clickable { ed.fullscreen = false }, contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Fullscreen, "전체 화면 해제", tint = Color.White, modifier = Modifier.size(22.dp))
+                Icon(Icons.Filled.Fullscreen, L.t("전체 화면 해제"), tint = Color.White, modifier = Modifier.size(22.dp))
             }
         }
 
@@ -139,8 +141,8 @@ fun EditorScreen(ed: Editor, onCanvasView: (CanvasView) -> Unit, onExit: () -> U
         QuickMenuOverlay(ed)
         if (ed.mirrorView || ed.grayscaleView) {
             Row(Modifier.align(Alignment.BottomEnd).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (ed.mirrorView) Pill("좌우 반전 보기", Modifier.clickable { ed.toggleMirrorView() })
-                if (ed.grayscaleView) Pill("흑백 보기", Modifier.clickable { ed.toggleGrayscaleView() })
+                if (ed.mirrorView) Pill(L.t("좌우 반전 보기"), Modifier.clickable { ed.toggleMirrorView() })
+                if (ed.grayscaleView) Pill(L.t("흑백 보기"), Modifier.clickable { ed.toggleGrayscaleView() })
             }
         }
         Hud(ed, Modifier.align(Alignment.TopCenter).padding(top = 60.dp))
@@ -197,26 +199,26 @@ private fun TopBar(ed: Editor, modifier: Modifier, onExit: () -> Unit, colorDrop
         modifier.fillMaxWidth().height(50.dp).background(UI.bar).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("갤러리", color = UI.text, fontSize = 15.sp, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onExit).padding(horizontal = 10.dp, vertical = 8.dp))
+        Text(L.t("갤러리"), color = UI.text, fontSize = 15.sp, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onExit).padding(horizontal = 10.dp, vertical = 8.dp))
         Spacer(Modifier.width(4.dp))
-        IconBtn(Icons.Filled.Build, "동작", selected = ed.panel == Panel.ACTIONS) { ed.panel = if (ed.panel == Panel.ACTIONS) null else Panel.ACTIONS }
-        IconBtn(Icons.Filled.AutoFixHigh, "조정", selected = ed.panel == Panel.ADJUSTMENTS || ed.mode == Mode.ADJUST || ed.mode == Mode.LIQUIFY) {
+        IconBtn(Icons.Filled.Build, L.t("동작"), selected = ed.panel == Panel.ACTIONS) { ed.panel = if (ed.panel == Panel.ACTIONS) null else Panel.ACTIONS }
+        IconBtn(Icons.Filled.AutoFixHigh, L.t("조정"), selected = ed.panel == Panel.ADJUSTMENTS || ed.mode == Mode.ADJUST || ed.mode == Mode.LIQUIFY) {
             if (ed.mode == Mode.ADJUST || ed.mode == Mode.LIQUIFY) ed.adjustTool.apply()
             else ed.panel = if (ed.panel == Panel.ADJUSTMENTS) null else Panel.ADJUSTMENTS
         }
-        IconBtn(Icons.Filled.Gesture, "선택", selected = ed.mode == Mode.SELECT) {
+        IconBtn(Icons.Filled.Gesture, L.t("선택"), selected = ed.mode == Mode.SELECT) {
             if (ed.mode == Mode.SELECT) ed.exitModes() else ed.selectionTool.begin()
         }
-        IconBtn(Icons.Filled.NearMe, "변형", selected = ed.mode == Mode.TRANSFORM) {
+        IconBtn(Icons.Filled.NearMe, L.t("변형"), selected = ed.mode == Mode.TRANSFORM) {
             if (ed.mode == Mode.TRANSFORM) ed.transformTool.commit() else { ed.exitModes(); ed.transformTool.begin() }
         }
         Spacer(Modifier.weight(1f))
         Text(ed.doc.name, color = UI.text2, fontSize = 12.sp, maxLines = 1, modifier = Modifier.widthIn(max = 200.dp))
         Spacer(Modifier.weight(1f))
-        ToolButton(ed, Tool.BRUSH) { tint, m -> Icon(Icons.Filled.Brush, "페인트", tint = tint, modifier = m) }
-        ToolButton(ed, Tool.SMUDGE) { tint, m -> Icon(Icons.Filled.TouchApp, "문지르기", tint = tint, modifier = m) }
+        ToolButton(ed, Tool.BRUSH) { tint, m -> Icon(Icons.Filled.Brush, L.t("페인트"), tint = tint, modifier = m) }
+        ToolButton(ed, Tool.SMUDGE) { tint, m -> Icon(Icons.Filled.TouchApp, L.t("문지르기"), tint = tint, modifier = m) }
         ToolButton(ed, Tool.ERASER) { tint, m -> EraserIcon(tint, m) }
-        IconBtn(Icons.Filled.Layers, "레이어", selected = ed.panel == Panel.LAYERS) { ed.panel = if (ed.panel == Panel.LAYERS) null else Panel.LAYERS }
+        IconBtn(Icons.Filled.Layers, L.t("레이어"), selected = ed.panel == Panel.LAYERS) { ed.panel = if (ed.panel == Panel.LAYERS) null else Panel.LAYERS }
         Spacer(Modifier.width(6.dp))
         ColorButton(ed, colorDrop)
     }
@@ -316,8 +318,8 @@ private fun Sidebar(ed: Editor, modifier: Modifier) {
             VerticalSlider(ed.toolOpacity[t] ?: 1f, Modifier.width(40.dp).height(170.dp),
                 onStart = { showPreview = 2 }, onEnd = { showPreview = 0; ed.saveToolState() }) { ed.toolOpacity[t] = it }
             Spacer(Modifier.height(12.dp))
-            RepeatButton(enabled = ed.canUndo, onFire = { ed.undo() }) { tint -> Icon(Icons.AutoMirrored.Filled.Undo, "실행 취소", tint = tint) }
-            RepeatButton(enabled = ed.canRedo, onFire = { ed.redo() }) { tint -> Icon(Icons.AutoMirrored.Filled.Redo, "다시 실행", tint = tint) }
+            RepeatButton(enabled = ed.canUndo, onFire = { ed.undo() }) { tint -> Icon(Icons.AutoMirrored.Filled.Undo, L.t("실행 취소"), tint = tint) }
+            RepeatButton(enabled = ed.canRedo, onFire = { ed.redo() }) { tint -> Icon(Icons.AutoMirrored.Filled.Redo, L.t("다시 실행"), tint = tint) }
         }
         if (showPreview != 0) {
             val dx = with(density) { (if (ed.prefs.rightHanded) -170 else 64).dp.roundToPx() }

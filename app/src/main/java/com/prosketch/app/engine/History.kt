@@ -1,5 +1,7 @@
 package com.prosketch.app.engine
 
+import com.prosketch.app.L
+
 import android.graphics.Bitmap
 import android.graphics.Rect
 
@@ -64,7 +66,7 @@ class PropsEntry(label: String, val layer: Layer, val before: LayerProps, val af
     override fun redo(h: HistoryHost) { layer.applyProps(after); h.structureChanged() }
 }
 
-class BackgroundEntry(val beforeColor: Int, val beforeVisible: Boolean, val afterColor: Int, val afterVisible: Boolean) : HistoryEntry("배경") {
+class BackgroundEntry(val beforeColor: Int, val beforeVisible: Boolean, val afterColor: Int, val afterVisible: Boolean) : HistoryEntry(L.t("배경")) {
     override val bytes = 32L
     override fun undo(h: HistoryHost) { h.doc.backgroundColor = beforeColor; h.doc.backgroundVisible = beforeVisible; h.doc.touchBackground(); h.structureChanged() }
     override fun redo(h: HistoryHost) { h.doc.backgroundColor = afterColor; h.doc.backgroundVisible = afterVisible; h.doc.touchBackground(); h.structureChanged() }

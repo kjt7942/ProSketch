@@ -53,6 +53,8 @@ class MainActivity : ComponentActivity() {
     private var canvasView: CanvasView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // language first: enum labels and default names are read at class initialisation
+        L.init(this, getSharedPreferences("prosketch", MODE_PRIVATE).getInt("language", 0))
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         store = ProjectStore(this)
@@ -60,6 +62,7 @@ class MainActivity : ComponentActivity() {
         brushes = BrushStore(this)
         palettes = PaletteStore(this)
         BrushTextures.customDir = brushes.customDir
+        com.prosketch.app.data.CrashLog.install(this) { editor?.emergencySave() }
         hideSystemBars()
 
         setContent {
@@ -71,7 +74,7 @@ class MainActivity : ComponentActivity() {
                     val id = openId ?: return@LaunchedEffect
                     doc = null
                     val d = withContext(Dispatchers.IO) { runCatching { store.load(id) }.getOrNull() }
-                    if (d == null) { error = "작품을 열 수 없습니다"; openId = null } else doc = d
+                    if (d == null) { error = L.t("작품을 열 수 없습니다"); openId = null } else doc = d
                 }
                 val d = doc
                 when {
@@ -80,7 +83,7 @@ class MainActivity : ComponentActivity() {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = UI.accent)
                             Spacer(Modifier.height(12.dp))
-                            Text("작품 여는 중…", color = UI.text)
+                            Text(L.t("작품 여는 중…"), color = UI.text)
                         }
                     }
                     else -> {
@@ -92,10 +95,41 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 error?.let { androidx.compose.material3.AlertDialog(onDismissRequest = { error = null }, text = { Text(it) },
-                    confirmButton = { androidx.compose.material3.TextButton({ error = null }) { Text("확인") } }) }
-                UpdateDialog(this@MainActivity)
+                    confirmButton = { androidx.compose.material3.TextButton({ error = null }) { Text(L.t("확인")) } }) }
+                if (BuildConfig.SELF_UPDATE) UpdateDialog(this@MainActivity)
+                CrashReportDialog()
+                var guide by remember { mutableStateOf(!prefs.onboarded) }
+                if (guide) com.prosketch.app.ui.common.OnboardingDialog { prefs.onboarded = true; guide = false }
             }
         }
+    }
+
+    /** Shown once after an unexpected exit: the work was saved; the report can be sent as a GitHub issue. */
+    @androidx.compose.runtime.Composable
+    private fun CrashReportDialog() {
+        var report by remember { mutableStateOf(com.prosketch.app.data.CrashLog.pending(this)) }
+        val r = report ?: return
+        fun dismiss() { com.prosketch.app.data.CrashLog.clear(this); report = null }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { dismiss() },
+            title = { Text(L.t("ProSketch가 예기치 않게 종료되었습니다")) },
+            text = { Text(L.t("작업 중이던 작품은 자동으로 저장했습니다. 오류 보고를 보내 주시면 문제를 고치는 데 큰 도움이 됩니다.\n\n") + r.lineSequence().take(6).joinToString("\n")) },
+            dismissButton = {
+                androidx.compose.material3.TextButton({
+                    val cm = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("ProSketch crash", r))
+                    dismiss()
+                }) { Text(L.t("복사")) }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton({
+                    val body = android.net.Uri.encode("```\n" + r.take(5000) + "\n```")
+                    val url = "https://github.com/${com.prosketch.app.data.Updater.REPO}/issues/new?title=" + android.net.Uri.encode(L.t("앱 종료 오류")) + "&body=" + body
+                    runCatching { startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                    dismiss()
+                }) { Text(L.t("GitHub에 보고")) }
+            },
+        )
     }
 
     private fun hideSystemBars() {
@@ -130,7 +164,7 @@ class MainActivity : ComponentActivity() {
         val ctrl = event.isCtrlPressed || event.isMetaPressed
         val shift = event.isShiftPressed
         val transforming = ed.mode == Mode.TRANSFORM && ed.transformTool.session != null
-        fun size(delta: Float) { ed.toolSize[ed.tool] = ((ed.toolSize[ed.tool] ?: 0.3f) + delta).coerceIn(0f, 1f); ed.hud("크기 ${((ed.toolSize[ed.tool] ?: 0f) * 100).toInt()}%") }
+        fun size(delta: Float) { ed.toolSize[ed.tool] = ((ed.toolSize[ed.tool] ?: 0.3f) + delta).coerceIn(0f, 1f); ed.hud(L.tf("크기 {0}%", ((ed.toolSize[ed.tool] ?: 0f) * 100).toInt())) }
         fun nudge(dx: Float, dy: Float): Boolean { if (!transforming) return false; val s = if (shift) 10f else 1f; ed.transformTool.nudge(dx * s, dy * s); return true }
         val handled = when (event.keyCode) {
             KeyEvent.KEYCODE_Z -> if (ctrl) { if (shift) ed.redo() else ed.undo(); true } else false
@@ -141,7 +175,7 @@ class MainActivity : ComponentActivity() {
             }
             KeyEvent.KEYCODE_E -> if (!ctrl) { ed.selectTool(Tool.ERASER); true } else false
             KeyEvent.KEYCODE_S -> when {
-                ctrl -> { ed.save(); ed.hud("저장됨"); true }
+                ctrl -> { ed.save(); ed.hud(L.t("저장됨")); true }
                 shift -> { ed.selectTool(Tool.SMUDGE); true }
                 else -> { if (ed.mode == Mode.SELECT) ed.exitModes() else ed.selectionTool.begin(); true }
             }

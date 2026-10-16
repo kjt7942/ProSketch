@@ -1,5 +1,7 @@
 package com.prosketch.app.engine
 
+import com.prosketch.app.L
+
 import android.graphics.Color
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
@@ -33,73 +35,73 @@ private fun choice(key: String, label: String, options: List<String>, default: I
     FilterParam(key, label, 0f, (options.size - 1).toFloat(), default.toFloat(), "", choices = options)
 
 enum class AdjustmentType(val label: String, val params: List<FilterParam>, val section: Int) {
-    HSB("색조, 채도, 밝기", listOf(
-        FilterParam("hue", "색조", -180f, 180f, 0f, "°"),
-        FilterParam("sat", "채도", -100f, 100f, 0f),
-        FilterParam("bri", "밝기", -100f, 100f, 0f)), 0),
-    COLOR_BALANCE("색상 균형", listOf(
-        FilterParam("cr", "청록 ↔ 빨강", -100f, 100f, 0f),
-        FilterParam("mg", "자홍 ↔ 녹색", -100f, 100f, 0f),
-        FilterParam("yb", "노랑 ↔ 파랑", -100f, 100f, 0f)), 0),
-    CURVES("커브", emptyList(), 0),
-    GRADIENT_MAP("그라디언트 맵", listOf(FilterParam("amount", "강도", 0f, 100f, 100f)), 0),
-    RECOLOR("재채색", listOf(
-        FilterParam("flood", "채우기 범위", 0f, 100f, 25f),
+    HSB(L.t("색조, 채도, 밝기"), listOf(
+        FilterParam("hue", L.t("색조"), -180f, 180f, 0f, "°"),
+        FilterParam("sat", L.t("채도"), -100f, 100f, 0f),
+        FilterParam("bri", L.t("밝기"), -100f, 100f, 0f)), 0),
+    COLOR_BALANCE(L.t("색상 균형"), listOf(
+        FilterParam("cr", L.t("청록 ↔ 빨강"), -100f, 100f, 0f),
+        FilterParam("mg", L.t("자홍 ↔ 녹색"), -100f, 100f, 0f),
+        FilterParam("yb", L.t("노랑 ↔ 파랑"), -100f, 100f, 0f)), 0),
+    CURVES(L.t("커브"), emptyList(), 0),
+    GRADIENT_MAP(L.t("그라디언트 맵"), listOf(FilterParam("amount", L.t("강도"), 0f, 100f, 100f)), 0),
+    RECOLOR(L.t("재채색"), listOf(
+        FilterParam("flood", L.t("채우기 범위"), 0f, 100f, 25f),
         FilterParam("tx", "", 0f, 1f, 0.5f, hidden = true), FilterParam("ty", "", 0f, 1f, 0.5f, hidden = true)), 0),
-    BRIGHTNESS_CONTRAST("밝기/대비", listOf(
-        FilterParam("bri", "밝기", -100f, 100f, 0f),
-        FilterParam("con", "대비", -100f, 100f, 0f)), 0),
-    POSTERIZE("포스터화", listOf(FilterParam("levels", "단계", 2f, 32f, 6f, "")), 0),
-    INVERT("색상 반전", listOf(FilterParam("amount", "강도", 0f, 100f, 100f)), 0),
-    GAUSSIAN_BLUR("가우시안 흐림 효과", listOf(FilterParam("radius", "흐림", 0f, 100f, 15f)), 1),
-    MOTION_BLUR("움직임 흐림 효과", listOf(
-        FilterParam("dist", "거리", 0f, 100f, 20f),
-        FilterParam("angle", "각도", 0f, 360f, 0f, "°")), 1),
-    PERSPECTIVE_BLUR("원근 흐림 효과", listOf(
-        FilterParam("amount", "흐림", 0f, 100f, 25f),
-        choice("mode", "방식", listOf("위치", "방향")),
-        FilterParam("angle", "방향", 0f, 360f, 0f, "°", visibleWhen = "mode" to setOf(1)),
+    BRIGHTNESS_CONTRAST(L.t("밝기/대비"), listOf(
+        FilterParam("bri", L.t("밝기"), -100f, 100f, 0f),
+        FilterParam("con", L.t("대비"), -100f, 100f, 0f)), 0),
+    POSTERIZE(L.t("포스터화"), listOf(FilterParam("levels", L.t("단계"), 2f, 32f, 6f, "")), 0),
+    INVERT(L.t("색상 반전"), listOf(FilterParam("amount", L.t("강도"), 0f, 100f, 100f)), 0),
+    GAUSSIAN_BLUR(L.t("가우시안 흐림 효과"), listOf(FilterParam("radius", L.t("흐림"), 0f, 100f, 15f)), 1),
+    MOTION_BLUR(L.t("움직임 흐림 효과"), listOf(
+        FilterParam("dist", L.t("거리"), 0f, 100f, 20f),
+        FilterParam("angle", L.t("각도"), 0f, 360f, 0f, "°")), 1),
+    PERSPECTIVE_BLUR(L.t("원근 흐림 효과"), listOf(
+        FilterParam("amount", L.t("흐림"), 0f, 100f, 25f),
+        choice("mode", L.t("방식"), listOf(L.t("위치"), L.t("방향"))),
+        FilterParam("angle", L.t("방향"), 0f, 360f, 0f, "°", visibleWhen = "mode" to setOf(1)),
         FilterParam("fx", "", 0f, 1f, 0.5f, hidden = true), FilterParam("fy", "", 0f, 1f, 0.5f, hidden = true)), 1),
-    SHARPEN("선명하게", listOf(FilterParam("amount", "선명도", 0f, 100f, 40f)), 2),
-    NOISE("노이즈", listOf(
-        FilterParam("amount", "노이즈", 0f, 100f, 30f),
-        choice("style", "모양", listOf("구름", "물결", "능선")),
-        FilterParam("scale", "크기", 1f, 100f, 25f),
-        FilterParam("octaves", "옥타브", 1f, 8f, 4f, ""),
-        FilterParam("turb", "난류", 0f, 100f, 0f),
-        choice("multi", "채널", listOf("단색", "다색")),
-        FilterParam("additive", "더하기 (원본 위에 겹침)", 0f, 1f, 1f, "")), 2),
-    BLOOM("블룸", listOf(
-        FilterParam("amount", "블룸", 0f, 100f, 40f),
-        FilterParam("threshold", "전환", 0f, 100f, 55f),
-        FilterParam("size", "크기", 0f, 100f, 35f),
-        FilterParam("burn", "번", 0f, 100f, 50f)), 2),
-    GLITCH("글리치", listOf(
-        FilterParam("amount", "글리치", 0f, 100f, 35f),
-        choice("mode", "효과", listOf("아티팩트", "웨이브", "시그널", "분산")),
-        FilterParam("block", "블록 크기", 1f, 100f, 30f, visibleWhen = "mode" to setOf(0, 2)),
-        FilterParam("amp", "진폭", 0f, 100f, 40f, visibleWhen = "mode" to setOf(1)),
-        FilterParam("freq", "주파수", 0f, 100f, 40f, visibleWhen = "mode" to setOf(1)),
-        FilterParam("rs", "빨강 이동", -100f, 100f, 30f, visibleWhen = "mode" to setOf(3)),
-        FilterParam("gs", "녹색 이동", -100f, 100f, -20f, visibleWhen = "mode" to setOf(3)),
-        FilterParam("bs", "파랑 이동", -100f, 100f, 10f, visibleWhen = "mode" to setOf(3)),
-        FilterParam("zoom", "확대", 1f, 100f, 50f),
-        FilterParam("seed", "변형", 0f, 100f, 1f, "")), 2),
-    HALFTONE("하프톤", listOf(
-        FilterParam("size", "하프톤", 1f, 100f, 25f),
-        choice("style", "방식", listOf("풀 컬러", "스크린 프린트", "신문"))), 2),
-    CHROMATIC("색수차", listOf(
-        FilterParam("amount", "색수차", 0f, 100f, 25f),
-        choice("mode", "방식", listOf("원근", "변위")),
-        FilterParam("transition", "전환", 0f, 100f, 30f, visibleWhen = "mode" to setOf(0)),
-        FilterParam("falloff", "감쇠", 0f, 100f, 30f, visibleWhen = "mode" to setOf(0)),
-        FilterParam("blur", "흐림", 0f, 100f, 0f, visibleWhen = "mode" to setOf(1)),
-        FilterParam("transparency", "투명도", 0f, 100f, 0f, visibleWhen = "mode" to setOf(1)),
+    SHARPEN(L.t("선명하게"), listOf(FilterParam("amount", L.t("선명도"), 0f, 100f, 40f)), 2),
+    NOISE(L.t("노이즈"), listOf(
+        FilterParam("amount", L.t("노이즈"), 0f, 100f, 30f),
+        choice("style", L.t("모양"), listOf(L.t("구름"), L.t("물결"), L.t("능선"))),
+        FilterParam("scale", L.t("크기"), 1f, 100f, 25f),
+        FilterParam("octaves", L.t("옥타브"), 1f, 8f, 4f, ""),
+        FilterParam("turb", L.t("난류"), 0f, 100f, 0f),
+        choice("multi", L.t("채널"), listOf(L.t("단색"), L.t("다색"))),
+        FilterParam("additive", L.t("더하기 (원본 위에 겹침)"), 0f, 1f, 1f, "")), 2),
+    BLOOM(L.t("블룸"), listOf(
+        FilterParam("amount", L.t("블룸"), 0f, 100f, 40f),
+        FilterParam("threshold", L.t("전환"), 0f, 100f, 55f),
+        FilterParam("size", L.t("크기"), 0f, 100f, 35f),
+        FilterParam("burn", L.t("번"), 0f, 100f, 50f)), 2),
+    GLITCH(L.t("글리치"), listOf(
+        FilterParam("amount", L.t("글리치"), 0f, 100f, 35f),
+        choice("mode", L.t("효과"), listOf(L.t("아티팩트"), L.t("웨이브"), L.t("시그널"), L.t("분산"))),
+        FilterParam("block", L.t("블록 크기"), 1f, 100f, 30f, visibleWhen = "mode" to setOf(0, 2)),
+        FilterParam("amp", L.t("진폭"), 0f, 100f, 40f, visibleWhen = "mode" to setOf(1)),
+        FilterParam("freq", L.t("주파수"), 0f, 100f, 40f, visibleWhen = "mode" to setOf(1)),
+        FilterParam("rs", L.t("빨강 이동"), -100f, 100f, 30f, visibleWhen = "mode" to setOf(3)),
+        FilterParam("gs", L.t("녹색 이동"), -100f, 100f, -20f, visibleWhen = "mode" to setOf(3)),
+        FilterParam("bs", L.t("파랑 이동"), -100f, 100f, 10f, visibleWhen = "mode" to setOf(3)),
+        FilterParam("zoom", L.t("확대"), 1f, 100f, 50f),
+        FilterParam("seed", L.t("변형"), 0f, 100f, 1f, "")), 2),
+    HALFTONE(L.t("하프톤"), listOf(
+        FilterParam("size", L.t("하프톤"), 1f, 100f, 25f),
+        choice("style", L.t("방식"), listOf(L.t("풀 컬러"), L.t("스크린 프린트"), L.t("신문")))), 2),
+    CHROMATIC(L.t("색수차"), listOf(
+        FilterParam("amount", L.t("색수차"), 0f, 100f, 25f),
+        choice("mode", L.t("방식"), listOf(L.t("원근"), L.t("변위"))),
+        FilterParam("transition", L.t("전환"), 0f, 100f, 30f, visibleWhen = "mode" to setOf(0)),
+        FilterParam("falloff", L.t("감쇠"), 0f, 100f, 30f, visibleWhen = "mode" to setOf(0)),
+        FilterParam("blur", L.t("흐림"), 0f, 100f, 0f, visibleWhen = "mode" to setOf(1)),
+        FilterParam("transparency", L.t("투명도"), 0f, 100f, 0f, visibleWhen = "mode" to setOf(1)),
         FilterParam("fx", "", 0f, 1f, 0.5f, hidden = true), FilterParam("fy", "", 0f, 1f, 0.5f, hidden = true),
         FilterParam("dx", "", -1f, 1f, 0.01f, hidden = true), FilterParam("dy", "", -1f, 1f, 0f, hidden = true)), 2),
-    PIXELATE("모자이크", listOf(FilterParam("size", "크기", 1f, 100f, 12f, "px")), 2),
-    LIQUIFY("픽셀 유동화", emptyList(), 3),
-    CLONE("복제", emptyList(), 3);
+    PIXELATE(L.t("모자이크"), listOf(FilterParam("size", L.t("크기"), 1f, 100f, 12f, "px")), 2),
+    LIQUIFY(L.t("픽셀 유동화"), emptyList(), 3),
+    CLONE(L.t("복제"), emptyList(), 3);
 
     /** Types that can be painted on with a brush instead of applied to the whole layer. */
     val supportsPencil get() = this != LIQUIFY && this != CLONE && this != RECOLOR
@@ -111,15 +113,15 @@ data class GradientPreset(val name: String, val colors: IntArray, val stops: Flo
 
 object GradientPresets {
     val all = listOf(
-        GradientPreset("느와르", intArrayOf(0xFF000000.toInt(), 0xFFFFFFFF.toInt()), floatArrayOf(0f, 1f)),
-        GradientPreset("석양", intArrayOf(0xFF1A0B3D.toInt(), 0xFFB0305C.toInt(), 0xFFF28B30.toInt(), 0xFFFFE9A8.toInt()), floatArrayOf(0f, 0.35f, 0.7f, 1f)),
-        GradientPreset("네온", intArrayOf(0xFF0B0221.toInt(), 0xFF6A00F4.toInt(), 0xFFFF2E97.toInt(), 0xFF00F5D4.toInt()), floatArrayOf(0f, 0.35f, 0.7f, 1f)),
-        GradientPreset("빈티지", intArrayOf(0xFF2B1B17.toInt(), 0xFF7A5C3E.toInt(), 0xFFD9B98C.toInt(), 0xFFF6EEDC.toInt()), floatArrayOf(0f, 0.35f, 0.75f, 1f)),
-        GradientPreset("심해", intArrayOf(0xFF000814.toInt(), 0xFF003566.toInt(), 0xFF0096C7.toInt(), 0xFFCAF0F8.toInt()), floatArrayOf(0f, 0.4f, 0.75f, 1f)),
-        GradientPreset("화산", intArrayOf(0xFF0D0D0D.toInt(), 0xFF6A040F.toInt(), 0xFFE85D04.toInt(), 0xFFFFBA08.toInt()), floatArrayOf(0f, 0.4f, 0.75f, 1f)),
-        GradientPreset("민트", intArrayOf(0xFF081C15.toInt(), 0xFF2D6A4F.toInt(), 0xFF74C69D.toInt(), 0xFFD8F3DC.toInt()), floatArrayOf(0f, 0.4f, 0.75f, 1f)),
-        GradientPreset("세피아", intArrayOf(0xFF1C120C.toInt(), 0xFF8C6239.toInt(), 0xFFF5E6C8.toInt()), floatArrayOf(0f, 0.55f, 1f)),
-        GradientPreset("듀오톤", intArrayOf(0xFF2E1760.toInt(), 0xFFFFC857.toInt()), floatArrayOf(0f, 1f)),
+        GradientPreset(L.t("느와르"), intArrayOf(0xFF000000.toInt(), 0xFFFFFFFF.toInt()), floatArrayOf(0f, 1f)),
+        GradientPreset(L.t("석양"), intArrayOf(0xFF1A0B3D.toInt(), 0xFFB0305C.toInt(), 0xFFF28B30.toInt(), 0xFFFFE9A8.toInt()), floatArrayOf(0f, 0.35f, 0.7f, 1f)),
+        GradientPreset(L.t("네온"), intArrayOf(0xFF0B0221.toInt(), 0xFF6A00F4.toInt(), 0xFFFF2E97.toInt(), 0xFF00F5D4.toInt()), floatArrayOf(0f, 0.35f, 0.7f, 1f)),
+        GradientPreset(L.t("빈티지"), intArrayOf(0xFF2B1B17.toInt(), 0xFF7A5C3E.toInt(), 0xFFD9B98C.toInt(), 0xFFF6EEDC.toInt()), floatArrayOf(0f, 0.35f, 0.75f, 1f)),
+        GradientPreset(L.t("심해"), intArrayOf(0xFF000814.toInt(), 0xFF003566.toInt(), 0xFF0096C7.toInt(), 0xFFCAF0F8.toInt()), floatArrayOf(0f, 0.4f, 0.75f, 1f)),
+        GradientPreset(L.t("화산"), intArrayOf(0xFF0D0D0D.toInt(), 0xFF6A040F.toInt(), 0xFFE85D04.toInt(), 0xFFFFBA08.toInt()), floatArrayOf(0f, 0.4f, 0.75f, 1f)),
+        GradientPreset(L.t("민트"), intArrayOf(0xFF081C15.toInt(), 0xFF2D6A4F.toInt(), 0xFF74C69D.toInt(), 0xFFD8F3DC.toInt()), floatArrayOf(0f, 0.4f, 0.75f, 1f)),
+        GradientPreset(L.t("세피아"), intArrayOf(0xFF1C120C.toInt(), 0xFF8C6239.toInt(), 0xFFF5E6C8.toInt()), floatArrayOf(0f, 0.55f, 1f)),
+        GradientPreset(L.t("듀오톤"), intArrayOf(0xFF2E1760.toInt(), 0xFFFFC857.toInt()), floatArrayOf(0f, 1f)),
     )
 }
 

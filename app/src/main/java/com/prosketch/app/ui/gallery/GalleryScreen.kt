@@ -1,5 +1,7 @@
 package com.prosketch.app.ui.gallery
 
+import com.prosketch.app.L
+
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -98,7 +100,7 @@ fun createDocument(store: ProjectStore, w: Int, h: Int, name: String, transparen
     val doc = Document(store.newId(), w, h)
     doc.name = name
     doc.backgroundVisible = !transparent
-    if (layers.isNullOrEmpty()) doc.layers.add(Layer.blank(w, h, "레이어 1")) else doc.layers.addAll(layers)
+    if (layers.isNullOrEmpty()) doc.layers.add(Layer.blank(w, h, L.t("레이어 1"))) else doc.layers.addAll(layers)
     doc.normalize()
     doc.activeIndex = doc.layers.indexOfLast { !it.isGroup }.coerceAtLeast(0)
     val thumb = Compositor.flatten(doc, min(1f, 640f / max(w, h)))
@@ -136,39 +138,39 @@ fun GalleryScreen(store: ProjectStore, onOpen: (String) -> Unit) {
     fun work(label: String, block: suspend () -> Unit) {
         busy = label
         scope.launch {
-            runCatching { withContext(Dispatchers.IO) { block() } }.onFailure { message = "실패: ${it.message ?: it.javaClass.simpleName}" }
+            runCatching { withContext(Dispatchers.IO) { block() } }.onFailure { message = L.tf("실패: {0}", it.message ?: it.javaClass.simpleName) }
             busy = null; refresh++
         }
     }
 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) work("사진 불러오는 중…") {
-            val bmp = decodeLimited(ctx, uri, 4096) ?: error("이미지를 열 수 없습니다")
-            val l = Layer.blank(bmp.width, bmp.height, "사진")
+        if (uri != null) work(L.t("사진 불러오는 중…")) {
+            val bmp = decodeLimited(ctx, uri, 4096) ?: error(L.t("이미지를 열 수 없습니다"))
+            val l = Layer.blank(bmp.width, bmp.height, L.t("사진"))
             Canvas(l.bitmap).drawBitmap(bmp, 0f, 0f, null)
-            val id = createDocument(store, bmp.width, bmp.height, "사진 작품", layers = listOf(l))
+            val id = createDocument(store, bmp.width, bmp.height, L.t("사진 작품"), layers = listOf(l))
             bmp.recycle()
             withContext(Dispatchers.Main) { onOpen(id) }
         }
     }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) work("가져오는 중…") {
+        if (uri != null) work(L.t("가져오는 중…")) {
             val name = ctx.contentResolver.query(uri, null, null, null, null)?.use { c ->
                 val i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME); if (c.moveToFirst() && i >= 0) c.getString(i) else null
-            } ?: "가져온 작품"
+            } ?: L.t("가져온 작품")
             val lower = name.lowercase()
             when {
                 lower.endsWith(".prosketch") || lower.endsWith(".zip") -> {
-                    ctx.contentResolver.openInputStream(uri)?.use { store.importZip(it) } ?: error("ProSketch 파일이 아닙니다")
+                    ctx.contentResolver.openInputStream(uri)?.use { store.importZip(it) } ?: error(L.t("ProSketch 파일이 아닙니다"))
                 }
                 lower.endsWith(".psd") -> {
                     val bytes = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
                     val psd = Psd.read(bytes)
-                    require(max(psd.width, psd.height) <= 8192) { "8192px 이하의 PSD만 지원합니다" }
+                    require(max(psd.width, psd.height) <= 8192) { L.t("8192px 이하의 PSD만 지원합니다") }
                     createDocument(store, psd.width, psd.height, name.substringBeforeLast('.'), transparent = true, layers = psd.layers)
                 }
                 else -> {
-                    val bmp = decodeLimited(ctx, uri, 4096) ?: error("지원하지 않는 파일입니다")
+                    val bmp = decodeLimited(ctx, uri, 4096) ?: error(L.t("지원하지 않는 파일입니다"))
                     val l = Layer.blank(bmp.width, bmp.height, name.substringBeforeLast('.'))
                     Canvas(l.bitmap).drawBitmap(bmp, 0f, 0f, null)
                     createDocument(store, bmp.width, bmp.height, name.substringBeforeLast('.'), layers = listOf(l))
@@ -178,35 +180,35 @@ fun GalleryScreen(store: ProjectStore, onOpen: (String) -> Unit) {
         }
     }
 
-    LaunchedEffect(Unit) { UpdateController.check(ctx, silent = true) }
+    LaunchedEffect(Unit) { if (com.prosketch.app.BuildConfig.SELF_UPDATE) UpdateController.check(ctx, silent = true) }
 
     Column(Modifier.fillMaxSize().background(Color(0xFF111113)).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("ProSketch", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(12.dp))
-            Text("갤러리", color = UI.text2, fontSize = 16.sp)
+            Text(L.t("갤러리"), color = UI.text2, fontSize = 16.sp)
             Spacer(Modifier.weight(1f))
             if (selecting) {
-                TextBtn("복제 (${selected.size})", enabled = selected.isNotEmpty()) { val ids = selected.toList(); work("복제 중…") { ids.forEach { store.duplicate(it) } }; selected.clear(); selecting = false }
+                TextBtn(L.tf("복제 ({0})", selected.size), enabled = selected.isNotEmpty()) { val ids = selected.toList(); work(L.t("복제 중…")) { ids.forEach { store.duplicate(it) } }; selected.clear(); selecting = false }
                 Spacer(Modifier.width(6.dp))
-                TextBtn("삭제 (${selected.size})", enabled = selected.isNotEmpty()) { deleteIds = selected.toList() }
+                TextBtn(L.tf("삭제 ({0})", selected.size), enabled = selected.isNotEmpty()) { deleteIds = selected.toList() }
                 Spacer(Modifier.width(6.dp))
-                TextBtn("완료", true) { selecting = false; selected.clear() }
+                TextBtn(L.t("완료"), true) { selecting = false; selected.clear() }
             } else {
-                TextBtn("선택") { selecting = true }
+                TextBtn(L.t("선택")) { selecting = true }
                 Spacer(Modifier.width(6.dp))
-                IconBtn(Icons.Filled.FileOpen, "가져오기") { filePicker.launch(arrayOf("image/*", "application/octet-stream", "application/zip", "image/vnd.adobe.photoshop", "*/*")) }
-                IconBtn(Icons.Filled.PhotoLibrary, "사진") { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-                IconBtn(Icons.Filled.Add, "새 캔버스") { newDialog = true }
-                IconBtn(Icons.Filled.SystemUpdate, "업데이트 확인") { UpdateController.check(ctx, silent = false) }
+                IconBtn(Icons.Filled.FileOpen, L.t("가져오기")) { filePicker.launch(arrayOf("image/*", "application/octet-stream", "application/zip", "image/vnd.adobe.photoshop", "*/*")) }
+                IconBtn(Icons.Filled.PhotoLibrary, L.t("사진")) { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                IconBtn(Icons.Filled.Add, L.t("새 캔버스")) { newDialog = true }
+                if (com.prosketch.app.BuildConfig.SELF_UPDATE) IconBtn(Icons.Filled.SystemUpdate, L.t("업데이트 확인")) { UpdateController.check(ctx, silent = false) }
             }
         }
         if (items.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("아직 작품이 없습니다", color = UI.text, fontSize = 18.sp)
+                    Text(L.t("아직 작품이 없습니다"), color = UI.text, fontSize = 18.sp)
                     Spacer(Modifier.height(10.dp))
-                    TextBtn("+ 새 캔버스 만들기", true) { newDialog = true }
+                    TextBtn(L.t("+ 새 캔버스 만들기"), true) { newDialog = true }
                 }
             }
         } else LazyVerticalGrid(GridCells.Adaptive(230.dp), Modifier.fillMaxSize().padding(horizontal = 14.dp),
@@ -218,19 +220,19 @@ fun GalleryScreen(store: ProjectStore, onOpen: (String) -> Unit) {
                         onLong = { menuFor = a.id },
                         onRename = { renameFor = a })
                     DropdownMenu(menuFor == a.id, { menuFor = null }) {
-                        DropdownMenuItem(text = { Text("이름 변경") }, onClick = { menuFor = null; renameFor = a })
-                        DropdownMenuItem(text = { Text("복제") }, onClick = { menuFor = null; work("복제 중…") { store.duplicate(a.id) } })
+                        DropdownMenuItem(text = { Text(L.t("이름 변경")) }, onClick = { menuFor = null; renameFor = a })
+                        DropdownMenuItem(text = { Text(L.t("복제")) }, onClick = { menuFor = null; work(L.t("복제 중…")) { store.duplicate(a.id) } })
                         listOf(ExportFormat.PNG, ExportFormat.JPEG, ExportFormat.PSD, ExportFormat.PROSKETCH).forEach { f ->
-                            DropdownMenuItem(text = { Text("${f.label}로 공유") }, onClick = {
+                            DropdownMenuItem(text = { Text(L.tf("{0}로 공유", f.label)) }, onClick = {
                                 menuFor = null
-                                work("내보내는 중…") {
-                                    val doc = store.load(a.id) ?: error("작품을 열 수 없습니다")
+                                work(L.t("내보내는 중…")) {
+                                    val doc = store.load(a.id) ?: error(L.t("작품을 열 수 없습니다"))
                                     val file = Exporter.export(ctx, store, doc, f)
                                     withContext(Dispatchers.Main) { Exporter.share(ctx, file, f.mime) }
                                 }
                             })
                         }
-                        DropdownMenuItem(text = { Text("삭제", color = UI.danger) }, onClick = { menuFor = null; deleteIds = listOf(a.id) })
+                        DropdownMenuItem(text = { Text(L.t("삭제"), color = UI.danger) }, onClick = { menuFor = null; deleteIds = listOf(a.id) })
                     }
                 }
             }
@@ -240,21 +242,21 @@ fun GalleryScreen(store: ProjectStore, onOpen: (String) -> Unit) {
 
     if (newDialog) NewCanvasDialog(onDismiss = { newDialog = false }) { w, h, name, transparent ->
         newDialog = false
-        work("캔버스 만드는 중…") { val id = createDocument(store, w, h, name, transparent); withContext(Dispatchers.Main) { onOpen(id) } }
+        work(L.t("캔버스 만드는 중…")) { val id = createDocument(store, w, h, name, transparent); withContext(Dispatchers.Main) { onOpen(id) } }
     }
     renameFor?.let { a ->
         var name by remember(a.id) { mutableStateOf(a.name) }
-        AlertDialog(onDismissRequest = { renameFor = null }, title = { Text("이름 변경") },
+        AlertDialog(onDismissRequest = { renameFor = null }, title = { Text(L.t("이름 변경")) },
             text = { OutlinedTextField(name, { name = it }, singleLine = true) },
-            confirmButton = { TextButton({ store.rename(a.id, name.ifBlank { a.name }); renameFor = null; refresh++ }) { Text("확인") } },
-            dismissButton = { TextButton({ renameFor = null }) { Text("취소") } })
+            confirmButton = { TextButton({ store.rename(a.id, name.ifBlank { a.name }); renameFor = null; refresh++ }) { Text(L.t("확인")) } },
+            dismissButton = { TextButton({ renameFor = null }) { Text(L.t("취소")) } })
     }
     deleteIds?.let { ids ->
-        AlertDialog(onDismissRequest = { deleteIds = null }, title = { Text("작품 삭제") }, text = { Text("${ids.size}개의 작품을 삭제할까요? 되돌릴 수 없습니다.") },
-            confirmButton = { TextButton({ ids.forEach { store.delete(it) }; selected.removeAll(ids); deleteIds = null; refresh++ }) { Text("삭제", color = UI.danger) } },
-            dismissButton = { TextButton({ deleteIds = null }) { Text("취소") } })
+        AlertDialog(onDismissRequest = { deleteIds = null }, title = { Text(L.t("작품 삭제")) }, text = { Text(L.tf("{0}개의 작품을 삭제할까요? 되돌릴 수 없습니다.", ids.size)) },
+            confirmButton = { TextButton({ ids.forEach { store.delete(it) }; selected.removeAll(ids); deleteIds = null; refresh++ }) { Text(L.t("삭제"), color = UI.danger) } },
+            dismissButton = { TextButton({ deleteIds = null }) { Text(L.t("취소")) } })
     }
-    message?.let { m -> AlertDialog(onDismissRequest = { message = null }, text = { Text(m) }, confirmButton = { TextButton({ message = null }) { Text("확인") } }) }
+    message?.let { m -> AlertDialog(onDismissRequest = { message = null }, text = { Text(m) }, confirmButton = { TextButton({ message = null }) { Text(L.t("확인")) } }) }
     busy?.let {
         Box(Modifier.fillMaxSize().background(Color(0x99000000)).clickable(enabled = true) {}, contentAlignment = Alignment.Center) {
             Column(Modifier.clip(RoundedCornerShape(16.dp)).background(UI.panel).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -299,14 +301,14 @@ private fun NewCanvasDialog(onDismiss: () -> Unit, onCreate: (Int, Int, String, 
     val rw = bounds?.width() ?: dm.widthPixels; val rh = bounds?.height() ?: dm.heightPixels
     val screenW = max(rw, rh); val screenH = min(rw, rh)
     val presets = listOf(
-        CanvasPreset("화면 크기 (가로)", screenW, screenH),
-        CanvasPreset("화면 크기 (세로)", screenH, screenW),
-        CanvasPreset("정사각형", 2048, 2048),
+        CanvasPreset(L.t("화면 크기 (가로)"), screenW, screenH),
+        CanvasPreset(L.t("화면 크기 (세로)"), screenH, screenW),
+        CanvasPreset(L.t("정사각형"), 2048, 2048),
         CanvasPreset("4K", 3840, 2160),
         CanvasPreset("A4 (300dpi)", 2480, 3508),
-        CanvasPreset("인스타그램 세로", 1080, 1350),
-        CanvasPreset("웹툰 (세로 스크롤)", 800, 4000),
-        CanvasPreset("움짤 / 애니메이션", 1280, 720),
+        CanvasPreset(L.t("인스타그램 세로"), 1080, 1350),
+        CanvasPreset(L.t("웹툰 (세로 스크롤)"), 800, 4000),
+        CanvasPreset(L.t("움짤 / 애니메이션"), 1280, 720),
     )
     var custom by remember { mutableStateOf(false) }
     var w by remember { mutableStateOf("3000") }
@@ -318,34 +320,34 @@ private fun NewCanvasDialog(onDismiss: () -> Unit, onCreate: (Int, Int, String, 
     cfg.let { }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("새 캔버스") },
+        title = { Text(L.t("새 캔버스")) },
         text = {
             Column {
                 if (!custom) presets.forEach { p ->
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { onCreate(p.w, p.h, "무제 작품", transparent) }.padding(vertical = 10.dp, horizontal = 6.dp)) {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { onCreate(p.w, p.h, L.t("무제 작품"), transparent) }.padding(vertical = 10.dp, horizontal = 6.dp)) {
                         Text(p.name, modifier = Modifier.weight(1f))
-                        Text("${p.w} × ${p.h}px · 최대 ${maxLayers(p.w, p.h)} 레이어", color = UI.text2, fontSize = 12.sp)
+                        Text(L.tf("{0} × {1}px · 최대 {2} 레이어", p.w, p.h, maxLayers(p.w, p.h)), color = UI.text2, fontSize = 12.sp)
                     }
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(w, { w = it.filter(Char::isDigit).take(5) }, label = { Text("너비 px") }, singleLine = true,
+                        OutlinedTextField(w, { w = it.filter(Char::isDigit).take(5) }, label = { Text(L.t("너비 px")) }, singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
-                        OutlinedTextField(h, { h = it.filter(Char::isDigit).take(5) }, label = { Text("높이 px") }, singleLine = true,
+                        OutlinedTextField(h, { h = it.filter(Char::isDigit).take(5) }, label = { Text(L.t("높이 px")) }, singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))
                     }
                     val ww = w.toIntOrNull() ?: 0; val hh = h.toIntOrNull() ?: 0
-                    if (ww in 16..8192 && hh in 16..8192) Text("최대 레이어: ${maxLayers(ww, hh)}개", color = UI.text2, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
-                    else Text("16 ~ 8192px 사이로 입력하세요", color = UI.danger, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                    if (ww in 16..8192 && hh in 16..8192) Text(L.tf("최대 레이어: {0}개", maxLayers(ww, hh)), color = UI.text2, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+                    else Text(L.t("16 ~ 8192px 사이로 입력하세요"), color = UI.danger, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
                 }
-                SwitchRow("투명 배경", transparent) { transparent = it }
+                SwitchRow(L.t("투명 배경"), transparent) { transparent = it }
             }
         },
         confirmButton = {
             if (custom) TextButton({
                 val ww = w.toIntOrNull() ?: return@TextButton; val hh = h.toIntOrNull() ?: return@TextButton
-                if (ww in 16..8192 && hh in 16..8192) onCreate(ww, hh, "무제 작품", transparent)
-            }) { Text("만들기") } else TextButton({ custom = true }) { Text("사용자 지정 크기…") }
+                if (ww in 16..8192 && hh in 16..8192) onCreate(ww, hh, L.t("무제 작품"), transparent)
+            }) { Text(L.t("만들기")) } else TextButton({ custom = true }) { Text(L.t("사용자 지정 크기…")) }
         },
-        dismissButton = { TextButton(onDismiss) { Text("취소") } },
+        dismissButton = { TextButton(onDismiss) { Text(L.t("취소")) } },
     )
 }

@@ -1,5 +1,7 @@
 package com.prosketch.app.data
 
+import com.prosketch.app.L
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -49,7 +51,7 @@ class ProjectStore(private val ctx: Context) {
             val o = JSONObject(mf.readText())
             val layers = o.optJSONArray("layers")
             val count = if (layers == null) 0 else (0 until layers.length()).count { !layers.getJSONObject(it).optBoolean("group") }
-            ArtworkInfo(d.name, o.optString("name", "무제"), o.getInt("width"), o.getInt("height"),
+            ArtworkInfo(d.name, o.optString("name", L.t("무제")), o.getInt("width"), o.getInt("height"),
                 o.optLong("modified", mf.lastModified()), count, File(d, "thumb.jpg"))
         }.getOrNull()
     }.sortedByDescending { it.modified }
@@ -132,7 +134,7 @@ class ProjectStore(private val ctx: Context) {
         return runCatching {
             val o = JSONObject(mf.readText())
             val doc = Document(id, o.getInt("width"), o.getInt("height"))
-            doc.name = o.optString("name", "무제 작품")
+            doc.name = o.optString("name", L.t("무제 작품"))
             doc.backgroundColor = o.optLong("background", 0xFFFFFFFFL).toInt()
             doc.backgroundVisible = o.optBoolean("backgroundVisible", true)
             doc.strokeCount = o.optInt("strokes"); doc.timeSpentMs = o.optLong("timeSpent")
@@ -155,7 +157,7 @@ class ProjectStore(private val ctx: Context) {
                 val lid = lo.getLong("id")
                 val isGroup = lo.optBoolean("group")
                 val bmp = if (isGroup) Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888) else pixels(lid)
-                val l = Layer(bmp, lo.optString("name", "레이어"), lid, isGroup)
+                val l = Layer(bmp, lo.optString("name", L.t("레이어")), lid, isGroup)
                 l.visible = lo.optBoolean("visible", true); l.opacity = lo.optDouble("opacity", 1.0).toFloat()
                 l.blend = LayerBlend.fromName(lo.optString("blend")); l.alphaLock = lo.optBoolean("alphaLock")
                 l.clipping = lo.optBoolean("clipping"); l.isReference = lo.optBoolean("reference"); l.locked = lo.optBoolean("locked")
@@ -165,12 +167,12 @@ class ProjectStore(private val ctx: Context) {
                 lo.optJSONObject("text")?.let { l.text = com.prosketch.app.engine.TextSpec.fromJson(it) }
                 if (lo.has("mask")) {
                     val mid = lo.getLong("mask")
-                    l.mask = Layer(pixels(mid, android.graphics.Color.WHITE), "마스크", mid).also { it.savedVersion = it.version }
+                    l.mask = Layer(pixels(mid, android.graphics.Color.WHITE), L.t("마스크"), mid).also { it.savedVersion = it.version }
                 }
                 l.savedVersion = l.version
                 doc.layers.add(l)
             }
-            if (doc.layers.none { !it.isGroup }) doc.layers.add(Layer.blank(doc.width, doc.height, "레이어 1"))
+            if (doc.layers.none { !it.isGroup }) doc.layers.add(Layer.blank(doc.width, doc.height, L.t("레이어 1")))
             doc.normalize()
             doc.activeIndex = o.optInt("active", doc.layers.size - 1).coerceIn(0, doc.layers.size - 1)
             o.optJSONObject("guides")?.let { g ->
@@ -215,7 +217,7 @@ class ProjectStore(private val ctx: Context) {
         dir(id).copyRecursively(dir(nid), overwrite = true)
         val mf = File(dir(nid), "project.json")
         val o = JSONObject(mf.readText())
-        o.put("name", o.optString("name") + " 복사본"); o.put("modified", System.currentTimeMillis())
+        o.put("name", o.optString("name") + L.t(" 복사본")); o.put("modified", System.currentTimeMillis())
         mf.writeText(o.toString())
         return nid
     }

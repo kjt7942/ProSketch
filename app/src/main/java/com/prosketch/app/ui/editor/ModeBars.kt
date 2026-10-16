@@ -1,5 +1,7 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.L
+
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
@@ -111,32 +113,32 @@ fun SelectionBar(ed: Editor, modifier: Modifier = Modifier) {
             if (feather) {
                 Row(Modifier.width(420.dp), verticalAlignment = Alignment.CenterVertically) {
                     var f by remember { mutableFloatStateOf(0f) }
-                    Box(Modifier.weight(1f)) { LabeledSlider("페더", f, 0f..100f, "${f.roundToInt()}%", { f = it }) }
-                    TextBtn("적용") { st.applyFeather(f / 100f * max(ed.doc.width, ed.doc.height) * 0.05f); feather = false }
+                    Box(Modifier.weight(1f)) { LabeledSlider(L.t("페더"), f, 0f..100f, "${f.roundToInt()}%", { f = it }) }
+                    TextBtn(L.t("적용")) { st.applyFeather(f / 100f * max(ed.doc.width, ed.doc.height) * 0.05f); feather = false }
                 }
                 Spacer(Modifier.height(6.dp))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
                 Segmented(SelectionMode.entries.map { it.label }, st.mode.ordinal, Modifier.width(300.dp)) { st.finish(); st.mode = SelectionMode.entries[it] }
                 Spacer(Modifier.width(6.dp))
-                TextBtn("추가", st.op == SelectionOp.ADD) { st.op = SelectionOp.ADD }
-                TextBtn("제거", st.op == SelectionOp.SUBTRACT) { st.op = SelectionOp.SUBTRACT }
-                TextBtn("반전") { st.invert() }
-                TextBtn("복사 및 붙여넣기") { ed.duplicateSelection() }
-                TextBtn("페더", feather) { feather = !feather }
+                TextBtn(L.t("추가"), st.op == SelectionOp.ADD) { st.op = SelectionOp.ADD }
+                TextBtn(L.t("제거"), st.op == SelectionOp.SUBTRACT) { st.op = SelectionOp.SUBTRACT }
+                TextBtn(L.t("반전")) { st.invert() }
+                TextBtn(L.t("복사 및 붙여넣기")) { ed.duplicateSelection() }
+                TextBtn(L.t("페더"), feather) { feather = !feather }
                 Box {
-                    TextBtn("저장 및 불러오기") { saveMenu = true }
+                    TextBtn(L.t("저장 및 불러오기")) { saveMenu = true }
                     DropdownMenu(saveMenu, { saveMenu = false }) {
-                        DropdownMenuItem(text = { Text("+ 현재 선택 저장") }, onClick = { st.saveCurrent(); saveMenu = false })
-                        st.saved.forEachIndexed { i, _ -> DropdownMenuItem(text = { Text("선택 ${i + 1} 불러오기") }, onClick = { st.load(i); saveMenu = false }) }
+                        DropdownMenuItem(text = { Text(L.t("+ 현재 선택 저장")) }, onClick = { st.saveCurrent(); saveMenu = false })
+                        st.saved.forEachIndexed { i, _ -> DropdownMenuItem(text = { Text(L.tf("선택 {0} 불러오기", i + 1)) }, onClick = { st.load(i); saveMenu = false }) }
                     }
                 }
-                TextBtn("색상 채우기", st.colorFill) { st.colorFill = !st.colorFill }
-                TextBtn("지우기") { st.clear() }
-                TextBtn("완료", true) { ed.exitModes() }
+                TextBtn(L.t("색상 채우기"), st.colorFill) { st.colorFill = !st.colorFill }
+                TextBtn(L.t("지우기")) { st.clear() }
+                TextBtn(L.t("완료"), true) { ed.exitModes() }
             }
-            if (st.mode == SelectionMode.FREEHAND) Text("드래그하여 올가미 · 탭하여 다각형 점 추가 · 시작점을 탭하여 닫기", color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
-            if (st.mode == SelectionMode.AUTOMATIC) Text("탭하여 선택 · 누른 채 좌우로 밀어 임계값 ${(st.autoThreshold * 100).roundToInt()}%", color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+            if (st.mode == SelectionMode.FREEHAND) Text(L.t("드래그하여 올가미 · 탭하여 다각형 점 추가 · 시작점을 탭하여 닫기"), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+            if (st.mode == SelectionMode.AUTOMATIC) Text(L.tf("탭하여 선택 · 누른 채 좌우로 밀어 임계값 {0}%", (st.autoThreshold * 100).roundToInt()), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
         }
     }
 }
@@ -149,16 +151,16 @@ fun TransformBar(ed: Editor, modifier: Modifier = Modifier) {
     val s = tt.session ?: return
     BottomBar(modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
-            TextBtn("자석", s.magnetics) { s.magnetics = !s.magnetics; tt.changed() }
+            TextBtn(L.t("자석"), s.magnetics) { s.magnetics = !s.magnetics; tt.changed() }
             Segmented(TransformMode.entries.map { it.label }, s.mode.ordinal, Modifier.width(320.dp)) { tt.setMode(TransformMode.entries[it]) }
-            TextBtn("수평 뒤집기") { tt.flipH() }
-            TextBtn("수직 뒤집기") { tt.flipV() }
-            TextBtn("45° 회전") { tt.rotate45() }
-            TextBtn("화면에 맞추기") { tt.fitToScreen() }
-            TextBtn("보간: ${s.interpolation.label}") { s.interpolation = Interpolation.entries[(s.interpolation.ordinal + 1) % Interpolation.entries.size]; tt.changed() }
-            TextBtn("초기화") { tt.reset() }
-            TextBtn("취소") { tt.cancel() }
-            TextBtn("완료", true) { tt.commit() }
+            TextBtn(L.t("수평 뒤집기")) { tt.flipH() }
+            TextBtn(L.t("수직 뒤집기")) { tt.flipV() }
+            TextBtn(L.t("45° 회전")) { tt.rotate45() }
+            TextBtn(L.t("화면에 맞추기")) { tt.fitToScreen() }
+            TextBtn(L.tf("보간: {0}", s.interpolation.label)) { s.interpolation = Interpolation.entries[(s.interpolation.ordinal + 1) % Interpolation.entries.size]; tt.changed() }
+            TextBtn(L.t("초기화")) { tt.reset() }
+            TextBtn(L.t("취소")) { tt.cancel() }
+            TextBtn(L.t("완료"), true) { tt.commit() }
         }
     }
 }
@@ -166,8 +168,8 @@ fun TransformBar(ed: Editor, modifier: Modifier = Modifier) {
 // ---------------------------------------------------------------- Adjustments
 @Composable
 fun AdjustmentsMenu(ed: Editor, modifier: Modifier = Modifier) {
-    PanelBox(modifier, title = "조정") {
-        val sections = listOf("색상", "흐림 효과", "효과", "변형")
+    PanelBox(modifier, title = L.t("조정")) {
+        val sections = listOf(L.t("색상"), L.t("흐림 효과"), L.t("효과"), L.t("변형"))
         Column(Modifier.androidxScroll()) {
             AdjustmentType.entries.groupBy { it.section }.toSortedMap().forEach { (sec, items) ->
                 com.prosketch.app.ui.common.SectionLabel(sections[sec])
@@ -194,9 +196,9 @@ fun AdjustBar(ed: Editor, modifier: Modifier = Modifier) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(t.label, color = UI.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                if (at.computing) Text("계산 중…", color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
+                if (at.computing) Text(L.t("계산 중…"), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
                 if (t.supportsPencil) {
-                    Segmented(listOf("레이어", "펜슬"), if (at.pencil) 1 else 0, Modifier.width(150.dp)) { at.pencil = it == 1; ed.invalidate() }
+                    Segmented(listOf(L.t("레이어"), L.t("펜슬")), if (at.pencil) 1 else 0, Modifier.width(150.dp)) { at.pencil = it == 1; ed.invalidate() }
                     Spacer(Modifier.width(6.dp))
                 }
                 // hold to see the layer without the adjustment
@@ -207,23 +209,23 @@ fun AdjustBar(ed: Editor, modifier: Modifier = Modifier) {
                             do { val ev = awaitPointerEvent() } while (ev.changes.any { it.pressed })
                             at.showOriginal = false; ed.invalidate()
                         }
-                    }.padding(horizontal = 12.dp, vertical = 8.dp)) { Text("원본", color = UI.text, fontSize = 13.sp) }
+                    }.padding(horizontal = 12.dp, vertical = 8.dp)) { Text(L.t("원본"), color = UI.text, fontSize = 13.sp) }
                 Spacer(Modifier.width(6.dp))
-                TextBtn("초기화") { at.reset() }
+                TextBtn(L.t("초기화")) { at.reset() }
                 Spacer(Modifier.width(6.dp))
-                TextBtn("취소") { at.cancel() }
+                TextBtn(L.t("취소")) { at.cancel() }
                 Spacer(Modifier.width(6.dp))
-                TextBtn("적용", true) { at.apply() }
+                TextBtn(L.t("적용"), true) { at.apply() }
             }
             when (t) {
                 AdjustmentType.CURVES -> CurvesEditor(ed)
                 AdjustmentType.COLOR_BALANCE -> {
-                    Segmented(listOf("그림자", "중간톤", "하이라이트"), at.balanceTone, Modifier.fillMaxWidth().padding(vertical = 6.dp)) { at.balanceTone = it }
+                    Segmented(listOf(L.t("그림자"), L.t("중간톤"), L.t("하이라이트")), at.balanceTone, Modifier.fillMaxWidth().padding(vertical = 6.dp)) { at.balanceTone = it }
                     val v = at.balance.v[at.balanceTone]
                     t.params.forEachIndexed { i, p ->
                         LabeledSlider(p.label, v[i], p.min..p.max, "${v[i].roundToInt()}", { nv -> v[i] = nv; at.balanceChanged() })
                     }
-                    SwitchRow("광도 유지", at.balance.preserveLuminosity) { at.balance.preserveLuminosity = it; at.balanceChanged() }
+                    SwitchRow(L.t("광도 유지"), at.balance.preserveLuminosity) { at.balance.preserveLuminosity = it; at.balanceChanged() }
                 }
                 AdjustmentType.GRADIENT_MAP -> {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 6.dp)) {
@@ -239,14 +241,14 @@ fun AdjustBar(ed: Editor, modifier: Modifier = Modifier) {
                 }
                 AdjustmentType.CLONE -> {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextBtn(if (at.cloneLocked) "소스 고정됨" else "소스 고정", at.cloneLocked) { at.cloneLocked = !at.cloneLocked }
-                        Text("원을 끌어 복제할 위치를 정하고 그 밖을 칠합니다. 브러시·크기·불투명도는 사이드바와 브러시 라이브러리를 따릅니다.", color = UI.text2, fontSize = 11.sp)
+                        TextBtn(if (at.cloneLocked) L.t("소스 고정됨") else L.t("소스 고정"), at.cloneLocked) { at.cloneLocked = !at.cloneLocked }
+                        Text(L.t("원을 끌어 복제할 위치를 정하고 그 밖을 칠합니다. 브러시·크기·불투명도는 사이드바와 브러시 라이브러리를 따릅니다."), color = UI.text2, fontSize = 11.sp)
                     }
                 }
                 AdjustmentType.RECOLOR -> {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 4.dp)) {
                         Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(Color(ed.color)).border(1.dp, Color.White, RoundedCornerShape(6.dp)))
-                        Text("새 색상: 현재 색상 (색상 버튼에서 바꾸면 바로 반영)", color = UI.text2, fontSize = 11.sp)
+                        Text(L.t("새 색상: 현재 색상 (색상 버튼에서 바꾸면 바로 반영)"), color = UI.text2, fontSize = 11.sp)
                     }
                 }
                 else -> {}
@@ -263,16 +265,16 @@ fun AdjustBar(ed: Editor, modifier: Modifier = Modifier) {
                 }
             }
             val hint = when {
-                at.pencil -> "펜슬: 칠한 곳에만 효과가 적용됩니다 · 지우개로 되돌립니다"
-                t.hasFocal && at.focal() != null -> "원을 끌어 초점 위치를 옮기고, 캔버스를 좌우로 밀어 '${at.primaryParam()?.label}' 조절"
-                at.usesDragVector() -> "캔버스를 원하는 방향으로 끌어 방향과 거리를 정합니다"
-                t == AdjustmentType.RECOLOR -> "캔버스를 탭하거나 끌어 바꿀 색을 고릅니다"
+                at.pencil -> L.t("펜슬: 칠한 곳에만 효과가 적용됩니다 · 지우개로 되돌립니다")
+                t.hasFocal && at.focal() != null -> L.tf("원을 끌어 초점 위치를 옮기고, 캔버스를 좌우로 밀어 '{0}' 조절", at.primaryParam()?.label)
+                at.usesDragVector() -> L.t("캔버스를 원하는 방향으로 끌어 방향과 거리를 정합니다")
+                t == AdjustmentType.RECOLOR -> L.t("캔버스를 탭하거나 끌어 바꿀 색을 고릅니다")
                 t == AdjustmentType.CLONE -> ""
-                at.primaryParam() != null -> "캔버스를 손가락으로 좌우로 밀어 '${at.primaryParam()!!.label}' 조절"
+                at.primaryParam() != null -> L.tf("캔버스를 손가락으로 좌우로 밀어 '{0}' 조절", at.primaryParam()!!.label)
                 else -> ""
             }
             if (hint.isNotEmpty()) Text(hint, color = UI.text2, fontSize = 11.sp)
-            if (ed.selection != null) Text("선택 영역에만 적용됩니다", color = UI.accent, fontSize = 11.sp)
+            if (ed.selection != null) Text(L.t("선택 영역에만 적용됩니다"), color = UI.accent, fontSize = 11.sp)
         }
     }
 }
@@ -284,7 +286,7 @@ private fun Modifier.combinedClickableC(f: () -> Unit) = this.combinedClickable(
 private fun CurvesEditor(ed: Editor) {
     val at = ed.adjustTool
     at.version.let { }
-    Segmented(listOf("마스터", "빨강", "녹색", "파랑"), at.curveChannel, Modifier.fillMaxWidth().padding(vertical = 6.dp)) { at.curveChannel = it }
+    Segmented(listOf(L.t("마스터"), L.t("빨강"), L.t("녹색"), L.t("파랑")), at.curveChannel, Modifier.fillMaxWidth().padding(vertical = 6.dp)) { at.curveChannel = it }
     val chColor = listOf(Color.White, Color(0xFFFF5A5F), Color(0xFF30C46C), Color(0xFF3F8CFF))[at.curveChannel]
     val atRef by rememberUpdatedState(at)
     Canvas(
@@ -330,7 +332,7 @@ private fun CurvesEditor(ed: Editor) {
         drawPath(path, chColor, style = Stroke(2.5.dp.toPx()))
         pts.forEach { p -> drawCircle(chColor, 7.dp.toPx(), Offset(p[0] * size.width, (1f - p[1]) * size.height)) }
     }
-    Text("탭하여 점 추가 · 점을 위/아래 밖으로 끌어 삭제", color = UI.text2, fontSize = 11.sp)
+    Text(L.t("탭하여 점 추가 · 점을 위/아래 밖으로 끌어 삭제"), color = UI.text2, fontSize = 11.sp)
 }
 
 // ---------------------------------------------------------------- Liquify
@@ -342,21 +344,21 @@ fun LiquifyBar(ed: Editor, modifier: Modifier = Modifier) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box {
-                    TextBtn("모드: ${at.lqMode.label} ▾", true) { menu = true }
+                    TextBtn(L.tf("모드: {0} ▾", at.lqMode.label), true) { menu = true }
                     DropdownMenu(menu, { menu = false }) {
                         LiquifyMode.entries.forEach { m -> DropdownMenuItem(text = { Text(m.label) }, onClick = { at.lqMode = m; at.syncLiquify(); menu = false }) }
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                TextBtn("초기화") { at.reset() }
-                TextBtn("취소") { at.cancel() }
-                TextBtn("적용", true) { at.apply() }
+                TextBtn(L.t("초기화")) { at.reset() }
+                TextBtn(L.t("취소")) { at.cancel() }
+                TextBtn(L.t("적용"), true) { at.apply() }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.weight(1f)) { LabeledSlider("크기", at.lqSize, 0f..1f, "${(at.lqSize * 100).roundToInt()}%", { at.lqSize = it; at.syncLiquify() }) }
-                Box(Modifier.weight(1f)) { LabeledSlider("압력", at.lqPressure, 0f..1f, "${(at.lqPressure * 100).roundToInt()}%", { at.lqPressure = it; at.syncLiquify() }) }
-                Box(Modifier.weight(1f)) { LabeledSlider("왜곡", at.lqDistortion, 0f..1f, "${(at.lqDistortion * 100).roundToInt()}%", { at.lqDistortion = it; at.syncLiquify() }) }
-                Box(Modifier.weight(1f)) { LabeledSlider("모멘텀", at.lqMomentum, 0f..1f, "${(at.lqMomentum * 100).roundToInt()}%", { at.lqMomentum = it; at.syncLiquify() }) }
+                Box(Modifier.weight(1f)) { LabeledSlider(L.t("크기"), at.lqSize, 0f..1f, "${(at.lqSize * 100).roundToInt()}%", { at.lqSize = it; at.syncLiquify() }) }
+                Box(Modifier.weight(1f)) { LabeledSlider(L.t("압력"), at.lqPressure, 0f..1f, "${(at.lqPressure * 100).roundToInt()}%", { at.lqPressure = it; at.syncLiquify() }) }
+                Box(Modifier.weight(1f)) { LabeledSlider(L.t("왜곡"), at.lqDistortion, 0f..1f, "${(at.lqDistortion * 100).roundToInt()}%", { at.lqDistortion = it; at.syncLiquify() }) }
+                Box(Modifier.weight(1f)) { LabeledSlider(L.t("모멘텀"), at.lqMomentum, 0f..1f, "${(at.lqMomentum * 100).roundToInt()}%", { at.lqMomentum = it; at.syncLiquify() }) }
             }
         }
     }
@@ -373,16 +375,16 @@ fun GuideBar(ed: Editor, modifier: Modifier = Modifier) {
     BottomBar(modifier.widthIn(max = 820.dp)) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("그리기 가이드", color = UI.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                TextBtn("완료", true) { ed.mode = Mode.PAINT; ed.bump() }
+                Text(L.t("그리기 가이드"), color = UI.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                TextBtn(L.t("완료"), true) { ed.mode = Mode.PAINT; ed.bump() }
             }
             Spacer(Modifier.height(6.dp))
             Segmented(GuideType.entries.map { it.label }, g.type.ordinal, Modifier.fillMaxWidth()) { ch { g.type = GuideType.entries[it]; g.enabled = true } }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) { LabeledSlider("불투명도", g.opacity, 0.05f..1f, "${(g.opacity * 100).roundToInt()}%", { v -> ch { g.opacity = v } }) }
-                Box(Modifier.weight(1f)) { LabeledSlider("두께", g.thickness, 0.5f..6f, "%.1f".format(g.thickness), { v -> ch { g.thickness = v } }) }
+                Box(Modifier.weight(1f)) { LabeledSlider(L.t("불투명도"), g.opacity, 0.05f..1f, "${(g.opacity * 100).roundToInt()}%", { v -> ch { g.opacity = v } }) }
+                Box(Modifier.weight(1f)) { LabeledSlider(L.t("두께"), g.thickness, 0.5f..6f, "%.1f".format(g.thickness), { v -> ch { g.thickness = v } }) }
                 if (g.type == GuideType.GRID || g.type == GuideType.ISOMETRIC)
-                    Box(Modifier.weight(1f)) { LabeledSlider("격자 크기", g.gridSize, 10f..max(ed.doc.width, ed.doc.height) / 4f, "${g.gridSize.roundToInt()}px", { v -> ch { g.gridSize = v } }) }
+                    Box(Modifier.weight(1f)) { LabeledSlider(L.t("격자 크기"), g.gridSize, 10f..max(ed.doc.width, ed.doc.height) / 4f, "${g.gridSize.roundToInt()}px", { v -> ch { g.gridSize = v } }) }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 listOf(0xFF3FA9F5, 0xFFFF5A5F, 0xFF30C46C, 0xFFFFC53D, 0xFFB57BFF, 0xFFFFFFFF, 0xFF000000).forEach { c ->
@@ -391,26 +393,26 @@ fun GuideBar(ed: Editor, modifier: Modifier = Modifier) {
                         .combinedClickableC { ch { g.color = c.toInt() } })
                 }
                 Spacer(Modifier.width(10.dp))
-                Box(Modifier.weight(1f)) { SwitchRow("그리기 도우미", g.assist) { v -> ch { g.assist = v } } }
+                Box(Modifier.weight(1f)) { SwitchRow(L.t("그리기 도우미"), g.assist) { v -> ch { g.assist = v } } }
             }
             when (g.type) {
                 GuideType.SYMMETRY -> FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     SymmetryType.entries.forEach { s -> TextBtn(s.label, g.symmetry == s) { ch { g.symmetry = s } } }
-                    TextBtn("회전 대칭", g.rotational) { ch { g.rotational = !g.rotational } }
+                    TextBtn(L.t("회전 대칭"), g.rotational) { ch { g.rotational = !g.rotational } }
                     if (g.symmetry == SymmetryType.RADIAL) {
                         TextBtn("−") { ch { g.radialSegments = (g.radialSegments - 2).coerceAtLeast(2) } }
-                        Text("${g.radialSegments}분할", color = UI.text, modifier = Modifier.padding(top = 8.dp))
+                        Text(L.tf("{0}분할", g.radialSegments), color = UI.text, modifier = Modifier.padding(top = 8.dp))
                         TextBtn("+") { ch { g.radialSegments = (g.radialSegments + 2).coerceAtMost(32) } }
                     }
-                    TextBtn("중심 초기화") { ch { g.cx = Float.NaN; g.cy = Float.NaN; g.rotationDeg = 0f } }
+                    TextBtn(L.t("중심 초기화")) { ch { g.cx = Float.NaN; g.cy = Float.NaN; g.rotationDeg = 0f } }
                 }
                 GuideType.PERSPECTIVE -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("캔버스를 탭하여 소실점 추가 (최대 3개) · 드래그하여 이동", color = UI.text2, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                    TextBtn("소실점 지우기") { ch { g.vanishingPoints.clear() } }
+                    Text(L.t("캔버스를 탭하여 소실점 추가 (최대 3개) · 드래그하여 이동"), color = UI.text2, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    TextBtn(L.t("소실점 지우기")) { ch { g.vanishingPoints.clear() } }
                 }
                 else -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("파란 점: 위치 · 초록 점: 회전", color = UI.text2, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                    TextBtn("초기화") { ch { g.cx = Float.NaN; g.cy = Float.NaN; g.rotationDeg = 0f } }
+                    Text(L.t("파란 점: 위치 · 초록 점: 회전"), color = UI.text2, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    TextBtn(L.t("초기화")) { ch { g.cx = Float.NaN; g.cy = Float.NaN; g.rotationDeg = 0f } }
                 }
             }
         }
@@ -422,14 +424,14 @@ fun GuideBar(ed: Editor, modifier: Modifier = Modifier) {
 fun CopyPasteMenu(ed: Editor, modifier: Modifier = Modifier) {
     BottomBar(modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("복사 및 붙여넣기", color = UI.text, fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
-            TextBtn("잘라내기") { ed.cut(); ed.copyPasteMenu = false }
-            TextBtn("복사") { ed.copy(); ed.copyPasteMenu = false }
-            TextBtn("모두 복사") { ed.copy(all = true); ed.copyPasteMenu = false }
-            TextBtn("복제") { ed.duplicateSelection(); ed.copyPasteMenu = false }
-            TextBtn("잘라내기 및 붙여넣기") { ed.cutAndPaste(); ed.copyPasteMenu = false }
-            TextBtn("붙여넣기", enabled = ed.clipboard != null) { ed.paste(); ed.copyPasteMenu = false }
-            Icon(Icons.Filled.Close, "닫기", tint = UI.text2, modifier = Modifier.size(22.dp).combinedClickableC { ed.copyPasteMenu = false })
+            Text(L.t("복사 및 붙여넣기"), color = UI.text, fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
+            TextBtn(L.t("잘라내기")) { ed.cut(); ed.copyPasteMenu = false }
+            TextBtn(L.t("복사")) { ed.copy(); ed.copyPasteMenu = false }
+            TextBtn(L.t("모두 복사")) { ed.copy(all = true); ed.copyPasteMenu = false }
+            TextBtn(L.t("복제")) { ed.duplicateSelection(); ed.copyPasteMenu = false }
+            TextBtn(L.t("잘라내기 및 붙여넣기")) { ed.cutAndPaste(); ed.copyPasteMenu = false }
+            TextBtn(L.t("붙여넣기"), enabled = ed.clipboard != null) { ed.paste(); ed.copyPasteMenu = false }
+            Icon(Icons.Filled.Close, L.t("닫기"), tint = UI.text2, modifier = Modifier.size(22.dp).combinedClickableC { ed.copyPasteMenu = false })
         }
     }
 }
@@ -465,19 +467,19 @@ fun AnimationTimeline(ed: Editor, modifier: Modifier = Modifier) {
             if (settings) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Segmented(AnimLoop.entries.map { it.label }, a.loop.ordinal, Modifier.width(220.dp)) { a.loop = AnimLoop.entries[it]; rev++; ed.bump() }
-                    Box(Modifier.weight(1f)) { LabeledSlider("초당 프레임", a.fps.toFloat(), 1f..60f, "${a.fps}", { a.fps = it.roundToInt(); rev++ }, { ed.bump() }) }
-                    Box(Modifier.weight(1f)) { LabeledSlider("어니언 스킨 프레임", a.onionFrames.toFloat(), 0f..12f, if (a.onionFrames == 0) "없음" else "${a.onionFrames}", { a.onionFrames = it.roundToInt(); rev++; ed.invalidate() }, { ed.bump() }) }
-                    Box(Modifier.weight(1f)) { LabeledSlider("어니언 스킨 불투명도", a.onionOpacity, 0f..1f, "${(a.onionOpacity * 100).roundToInt()}%", { a.onionOpacity = it; rev++; ed.invalidate() }, { ed.bump() }) }
+                    Box(Modifier.weight(1f)) { LabeledSlider(L.t("초당 프레임"), a.fps.toFloat(), 1f..60f, "${a.fps}", { a.fps = it.roundToInt(); rev++ }, { ed.bump() }) }
+                    Box(Modifier.weight(1f)) { LabeledSlider(L.t("어니언 스킨 프레임"), a.onionFrames.toFloat(), 0f..12f, if (a.onionFrames == 0) L.t("없음") else "${a.onionFrames}", { a.onionFrames = it.roundToInt(); rev++; ed.invalidate() }, { ed.bump() }) }
+                    Box(Modifier.weight(1f)) { LabeledSlider(L.t("어니언 스킨 불투명도"), a.onionOpacity, 0f..1f, "${(a.onionOpacity * 100).roundToInt()}%", { a.onionOpacity = it; rev++; ed.invalidate() }, { ed.bump() }) }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) { SwitchRow("기본 프레임 혼합", a.blendPrimary, sub = "끄면 현재 프레임이 어니언 스킨 위에 그대로 표시") { a.blendPrimary = it; rev++; ed.bump() } }
-                    Box(Modifier.weight(1f)) { SwitchRow("어니언 스킨 색상", a.colorOnion) { a.colorOnion = it; rev++; ed.bump() } }
-                    Text("이전", color = UI.text2, fontSize = 12.sp)
+                    Box(Modifier.weight(1f)) { SwitchRow(L.t("기본 프레임 혼합"), a.blendPrimary, sub = L.t("끄면 현재 프레임이 어니언 스킨 위에 그대로 표시")) { a.blendPrimary = it; rev++; ed.bump() } }
+                    Box(Modifier.weight(1f)) { SwitchRow(L.t("어니언 스킨 색상"), a.colorOnion) { a.colorOnion = it; rev++; ed.bump() } }
+                    Text(L.t("이전"), color = UI.text2, fontSize = 12.sp)
                     Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(Color(a.onionBefore)).border(1.dp, Color.White, RoundedCornerShape(6.dp))
-                        .combinedClickableC { a.onionBefore = ed.color; rev++; ed.bump(); ed.hud("이전 프레임 색상: 현재 색상") })
-                    Text("다음", color = UI.text2, fontSize = 12.sp)
+                        .combinedClickableC { a.onionBefore = ed.color; rev++; ed.bump(); ed.hud(L.t("이전 프레임 색상: 현재 색상")) })
+                    Text(L.t("다음"), color = UI.text2, fontSize = 12.sp)
                     Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(Color(a.onionAfter)).border(1.dp, Color.White, RoundedCornerShape(6.dp))
-                        .combinedClickableC { a.onionAfter = ed.color; rev++; ed.bump(); ed.hud("다음 프레임 색상: 현재 색상") })
+                        .combinedClickableC { a.onionAfter = ed.color; rev++; ed.bump(); ed.hud(L.t("다음 프레임 색상: 현재 색상")) })
                 }
             }
             frameMenu?.takeIf { it in doc.layers }?.let { f ->
@@ -487,20 +489,20 @@ fun AnimationTimeline(ed: Editor, modifier: Modifier = Modifier) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(f.name, color = UI.text, fontSize = 13.sp, modifier = Modifier.width(110.dp), maxLines = 1)
                     Box(Modifier.weight(1f)) {
-                        LabeledSlider("유지 시간", f.holdFrames.toFloat(), 0f..120f, if (f.holdFrames == 0) "없음" else "${f.holdFrames}프레임",
+                        LabeledSlider(L.t("유지 시간"), f.holdFrames.toFloat(), 0f..120f, if (f.holdFrames == 0) L.t("없음") else L.tf("{0}프레임", f.holdFrames),
                             { f.holdFrames = it.roundToInt(); rev++; ed.invalidate() }, { ed.setHold(f, f.holdFrames) })
                     }
-                    TextBtn("복제") { ed.duplicateLayer(doc.indexOf(f)); frameMenu = null }
-                    TextBtn("삭제") { ed.deleteLayer(doc.indexOf(f)); frameMenu = null }
-                    if (first) TextBtn("배경", a.firstFrameBackground) { a.firstFrameBackground = !a.firstFrameBackground; rev++; ed.bump() }
-                    if (last) TextBtn("전경", a.lastFrameForeground) { a.lastFrameForeground = !a.lastFrameForeground; rev++; ed.bump() }
-                    Icon(Icons.Filled.Close, "닫기", tint = UI.text2, modifier = Modifier.size(22.dp).combinedClickableC { frameMenu = null })
+                    TextBtn(L.t("복제")) { ed.duplicateLayer(doc.indexOf(f)); frameMenu = null }
+                    TextBtn(L.t("삭제")) { ed.deleteLayer(doc.indexOf(f)); frameMenu = null }
+                    if (first) TextBtn(L.t("배경"), a.firstFrameBackground) { a.firstFrameBackground = !a.firstFrameBackground; rev++; ed.bump() }
+                    if (last) TextBtn(L.t("전경"), a.lastFrameForeground) { a.lastFrameForeground = !a.lastFrameForeground; rev++; ed.bump() }
+                    Icon(Icons.Filled.Close, L.t("닫기"), tint = UI.text2, modifier = Modifier.size(22.dp).combinedClickableC { frameMenu = null })
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                com.prosketch.app.ui.common.IconBtn(Icons.Filled.Settings, "설정", selected = settings) { settings = !settings }
-                com.prosketch.app.ui.common.IconBtn(if (ed.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, "재생") { ed.playing = !ed.playing }
-                com.prosketch.app.ui.common.IconBtn(Icons.Filled.Add, "프레임 추가") { ed.playing = false; ed.addFrame() }
+                com.prosketch.app.ui.common.IconBtn(Icons.Filled.Settings, L.t("설정"), selected = settings) { settings = !settings }
+                com.prosketch.app.ui.common.IconBtn(if (ed.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, L.t("재생")) { ed.playing = !ed.playing }
+                com.prosketch.app.ui.common.IconBtn(Icons.Filled.Add, L.t("프레임 추가")) { ed.playing = false; ed.addFrame() }
                 Spacer(Modifier.width(8.dp))
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     val frames = doc.topLevel()
@@ -517,7 +519,7 @@ fun AnimationTimeline(ed: Editor, modifier: Modifier = Modifier) {
                                 else { ed.selectLayer(doc.indexOf(f)); frameMenu = null }
                             }) {
                             Image(thumb.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-                            val tag = when { f === bg -> "배경"; f === fg -> "전경"; f.isGroup -> "그룹"; else -> null }
+                            val tag = when { f === bg -> L.t("배경"); f === fg -> L.t("전경"); f.isGroup -> L.t("그룹"); else -> null }
                             if (tag != null) Text(tag, color = Color.White, fontSize = 9.sp, modifier = Modifier.align(Alignment.BottomStart).background(Color(0x99000000)).padding(2.dp))
                         }
                         // held beats are shown as greyed slivers after the frame
@@ -526,7 +528,7 @@ fun AnimationTimeline(ed: Editor, modifier: Modifier = Modifier) {
                         if (f.holdFrames > 8) Text("+${f.holdFrames - 8}", color = UI.text2, fontSize = 10.sp)
                     }
                 }
-                Text("${com.prosketch.app.engine.Anim.totalFrames(doc)}프레임 · ${a.fps}fps", color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp))
+                Text(L.tf("{0}프레임 · {1}fps", com.prosketch.app.engine.Anim.totalFrames(doc), a.fps), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp))
             }
         }
     }
@@ -556,10 +558,10 @@ fun ReferenceWindow(ed: Editor) {
                 Modifier.fillMaxWidth().height(30.dp).pointerInput(Unit) { detectDragGestures { c, d -> c.consume(); off += d } }.padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("참조", color = UI.text, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                Text(if (ed.referenceImage != null) "캔버스 보기" else "", color = UI.accent, fontSize = 11.sp,
+                Text(L.t("참조"), color = UI.text, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text(if (ed.referenceImage != null) L.t("캔버스 보기") else "", color = UI.accent, fontSize = 11.sp,
                     modifier = Modifier.padding(end = 10.dp).combinedClickableC { ed.referenceImage = null; ed.referenceVersion++ })
-                Icon(Icons.Filled.Close, "닫기", tint = UI.text2, modifier = Modifier.size(18.dp).combinedClickableC { ed.referenceVisible = false })
+                Icon(Icons.Filled.Close, L.t("닫기"), tint = UI.text2, modifier = Modifier.size(18.dp).combinedClickableC { ed.referenceVisible = false })
             }
             Image(bmp.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth().weight(1f).background(Color.White))
         }
@@ -582,15 +584,15 @@ fun TimelapseReplay(ed: Editor, onClose: () -> Unit) {
     }
     Dialog(onClose, DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            if (frames.isEmpty()) Text("녹화된 타임랩스가 없습니다", color = Color.White, modifier = Modifier.align(Alignment.Center))
+            if (frames.isEmpty()) Text(L.t("녹화된 타임랩스가 없습니다"), color = Color.White, modifier = Modifier.align(Alignment.Center))
             bmp?.let { Image(it.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(bottom = 80.dp)
                 .pointerInput(frames.size) { detectDragGestures { c, d -> c.consume(); playing = false; if (frames.isNotEmpty()) idx = ((idx + (d.x / 4).roundToInt()) % frames.size + frames.size) % frames.size } }) }
             Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                com.prosketch.app.ui.common.IconBtn(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, "재생") { playing = !playing }
+                com.prosketch.app.ui.common.IconBtn(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, L.t("재생")) { playing = !playing }
                 Slider(idx.toFloat(), { playing = false; idx = it.roundToInt() }, valueRange = 0f..max(1, frames.size - 1).toFloat(), modifier = Modifier.weight(1f).padding(horizontal = 12.dp))
                 Text("${idx + 1}/${frames.size}", color = Color.White, fontSize = 12.sp)
                 Spacer(Modifier.width(12.dp))
-                TextBtn("완료", true) { onClose() }
+                TextBtn(L.t("완료"), true) { onClose() }
             }
         }
     }

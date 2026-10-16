@@ -1,5 +1,7 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.L
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
@@ -32,12 +34,12 @@ fun HistoryPanel(ed: Editor, modifier: Modifier = Modifier) {
     ed.canUndo.let { }; ed.canRedo.let { }
     val done = ed.history.undoLabels()
     val undone = ed.history.redoLabels()
-    val rows = listOf("작품 열기") + done + undone
+    val rows = listOf(L.t("작품 열기")) + done + undone
     val current = done.size
     val state = rememberLazyListState()
     LaunchedEffect(rows.size, current) { state.scrollToItem((current - 4).coerceAtLeast(0)) }
-    PanelBox(modifier, title = "작업 내역") {
-        Text("${done.size}단계 완료 · ${undone.size}단계 다시 실행 가능 (최대 250)", color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(bottom = 6.dp))
+    PanelBox(modifier, title = L.t("작업 내역")) {
+        Text(L.tf("{0}단계 완료 · {1}단계 다시 실행 가능 (최대 250)", done.size, undone.size), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(bottom = 6.dp))
         LazyColumn(Modifier.heightIn(max = 520.dp), state = state) {
             items(rows.size) { i ->
                 val isCurrent = i == current

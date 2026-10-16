@@ -1,5 +1,7 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.L
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -95,15 +97,15 @@ fun LayersPanel(ed: Editor, modifier: Modifier = Modifier) {
     val indentPx = with(density) { 40.dp.toPx() }
 
     val multi = ed.secondary.isNotEmpty()
-    PanelBox(modifier, title = "레이어", trailing = {
+    PanelBox(modifier, title = L.t("레이어"), trailing = {
         if (multi) {
-            TextBtn("그룹") { ed.createGroup() }
-            TextBtn("병합") { ed.mergeSelected() }
-            TextBtn("삭제") { ed.deleteSelected() }
+            TextBtn(L.t("그룹")) { ed.createGroup() }
+            TextBtn(L.t("병합")) { ed.mergeSelected() }
+            TextBtn(L.t("삭제")) { ed.deleteSelected() }
             Spacer(Modifier.width(4.dp))
         }
         Text("${doc.pixelBudgetUsed()}/${ed.maxLayers}", color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(end = 6.dp))
-        IconBtn(Icons.Filled.Add, "레이어 추가") { ed.addLayer() }
+        IconBtn(Icons.Filled.Add, L.t("레이어 추가")) { ed.addLayer() }
     }) {
         v.let { }
         val rows = ed.displayRows()
@@ -202,10 +204,10 @@ fun LayersPanel(ed: Editor, modifier: Modifier = Modifier) {
         var name by remember(l) { mutableStateOf(l.name) }
         AlertDialog(
             onDismissRequest = { renameFor = null },
-            title = { Text(if (l.isGroup) "그룹 이름 변경" else "레이어 이름 변경") },
+            title = { Text(if (l.isGroup) L.t("그룹 이름 변경") else L.t("레이어 이름 변경")) },
             text = { OutlinedTextField(name, { name = it }, singleLine = true) },
-            confirmButton = { TextButton({ ed.rename(l, name); renameFor = null }) { Text("확인") } },
-            dismissButton = { TextButton({ renameFor = null }) { Text("취소") } },
+            confirmButton = { TextButton({ ed.rename(l, name); renameFor = null }) { Text(L.t("확인")) } },
+            dismissButton = { TextButton({ renameFor = null }) { Text(L.t("취소")) } },
         )
     }
 }
@@ -245,11 +247,11 @@ private fun LayerRow(
             val dim = if (doc.effectiveVisible(layer)) 1f else 0.55f
             if (layer.isGroup) {
                 Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).combinedClickable(onClick = { ed.toggleExpanded(layer) }), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.ExpandMore, if (layer.expanded) "접기" else "펼치기", tint = Color.White, modifier = Modifier.size(22.dp).rotate(if (layer.expanded) 0f else -90f))
+                    Icon(Icons.Filled.ExpandMore, if (layer.expanded) L.t("접기") else L.t("펼치기"), tint = Color.White, modifier = Modifier.size(22.dp).rotate(if (layer.expanded) 0f else -90f))
                 }
                 Icon(Icons.Filled.Folder, null, tint = Color.White.copy(alpha = 0.9f * dim), modifier = Modifier.size(30.dp))
             } else {
-                if (layer.clipping) Icon(Icons.Filled.SubdirectoryArrowRight, "클리핑", tint = Color.White, modifier = Modifier.size(18.dp))
+                if (layer.clipping) Icon(Icons.Filled.SubdirectoryArrowRight, L.t("클리핑"), tint = Color.White, modifier = Modifier.size(18.dp))
                 Thumb(layer, layer.alphaLock, selected = false, dim = dim)
                 if (layer.isText) Text("A", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 2.dp).clip(RoundedCornerShape(3.dp)).background(Color(0x66000000)).padding(horizontal = 3.dp))
@@ -263,18 +265,18 @@ private fun LayerRow(
                 Text(layer.name, color = Color.White.copy(alpha = dim), fontSize = 14.sp, maxLines = 1,
                     fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Normal)
                 val tags = buildList {
-                    if (editingMask) add("마스크 편집")
-                    if (layer.isReference) add("참조")
-                    if (layer.alphaLock) add("알파 잠금")
-                    if (layer.isPrivate) add("비공개")
-                    if (layer.isText) add("텍스트")
+                    if (editingMask) add(L.t("마스크 편집"))
+                    if (layer.isReference) add(L.t("참조"))
+                    if (layer.alphaLock) add(L.t("알파 잠금"))
+                    if (layer.isPrivate) add(L.t("비공개"))
+                    if (layer.isText) add(L.t("텍스트"))
                     if (layer.opacity < 0.995f) add("${(layer.opacity * 100).roundToInt()}%")
-                    if (layer.holdFrames > 0 && doc.animation.enabled) add("유지 ${layer.holdFrames}")
+                    if (layer.holdFrames > 0 && doc.animation.enabled) add(L.tf("유지 {0}", layer.holdFrames))
                 }
                 if (tags.isNotEmpty()) Text(tags.joinToString(" · "), color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp, maxLines = 1)
             }
-            if (doc.effectiveLocked(layer) && !layer.locked) Icon(Icons.Filled.Lock, "그룹 잠김", tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(14.dp))
-            if (layer.locked) Icon(Icons.Filled.Lock, "잠김", tint = Color.White, modifier = Modifier.size(16.dp).padding(end = 2.dp))
+            if (doc.effectiveLocked(layer) && !layer.locked) Icon(Icons.Filled.Lock, L.t("그룹 잠김"), tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(14.dp))
+            if (layer.locked) Icon(Icons.Filled.Lock, L.t("잠김"), tint = Color.White, modifier = Modifier.size(16.dp).padding(end = 2.dp))
             Box(Modifier.size(34.dp).clip(RoundedCornerShape(6.dp)).combinedClickable(onClick = onBlend), contentAlignment = Alignment.Center) {
                 Text(if (layer.isGroup && layer.passThrough) "P" else layer.blend.short, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
@@ -286,15 +288,15 @@ private fun LayerRow(
                     .combinedClickable(onClick = { ed.toggleVisible(layer) }, onLongClick = { ed.soloToggle(layer) }),
                 contentAlignment = Alignment.Center,
             ) {
-                if (layer.visible) Icon(Icons.Filled.Check, "표시", tint = if (primary) UI.accent else Color.Black, modifier = Modifier.size(20.dp))
+                if (layer.visible) Icon(Icons.Filled.Check, L.t("표시"), tint = if (primary) UI.accent else Color.Black, modifier = Modifier.size(20.dp))
                 else if (ed.soloLayer === layer) Icon(Icons.Filled.VisibilityOff, null, tint = Color.White, modifier = Modifier.size(16.dp))
             }
         }
         if (swipedOpen) {
             Row(Modifier.align(Alignment.CenterEnd).fillMaxHeight().clip(RoundedCornerShape(topEnd = 10.dp, bottomEnd = 10.dp)), horizontalArrangement = Arrangement.End) {
-                SwipeAction(if (layer.locked) Icons.Filled.LockOpen else Icons.Filled.Lock, if (layer.locked) "잠금 해제" else "잠금", Color(0xFF5A5A62)) { onSwipeAction(0) }
-                SwipeAction(Icons.Filled.ContentCopy, "복제", Color(0xFF3A6FD8)) { onSwipeAction(1) }
-                SwipeAction(Icons.Filled.Delete, "삭제", Color(0xFFD64545)) { onSwipeAction(2) }
+                SwipeAction(if (layer.locked) Icons.Filled.LockOpen else Icons.Filled.Lock, if (layer.locked) L.t("잠금 해제") else L.t("잠금"), Color(0xFF5A5A62)) { onSwipeAction(0) }
+                SwipeAction(Icons.Filled.ContentCopy, L.t("복제"), Color(0xFF3A6FD8)) { onSwipeAction(1) }
+                SwipeAction(Icons.Filled.Delete, L.t("삭제"), Color(0xFFD64545)) { onSwipeAction(2) }
             }
         }
     }
@@ -325,13 +327,13 @@ private fun Thumb(layer: Layer, fineChecker: Boolean, selected: Boolean, dim: Fl
 private fun BlendEditor(ed: Editor, layer: Layer) {
     Column(Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF1E1E21)).padding(10.dp)) {
         Text(layer.name, color = UI.text2, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
-        LabeledSlider("불투명도", layer.opacity, 0f..1f, "${(layer.opacity * 100).roundToInt()}%", { ed.setOpacityLive(layer, it) }, { ed.commitOpacity(layer) })
+        LabeledSlider(L.t("불투명도"), layer.opacity, 0f..1f, "${(layer.opacity * 100).roundToInt()}%", { ed.setOpacityLive(layer, it) }, { ed.commitOpacity(layer) })
         Column {
             if (layer.isGroup) {
                 val sel = layer.passThrough
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (sel) UI.accentDim else Color.Transparent)
                     .combinedClickableCompat { ed.setPassThrough(layer, true) }.padding(horizontal = 8.dp, vertical = 6.dp)) {
-                    Text("통과 (그룹 아래와 혼합)", color = UI.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                    Text(L.t("통과 (그룹 아래와 혼합)"), color = UI.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
                     Text("P", color = UI.text2, fontSize = 12.sp)
                 }
                 HorizontalDivider(color = UI.divider, modifier = Modifier.padding(vertical = 3.dp))
@@ -363,59 +365,59 @@ private fun LayerOptions(ed: Editor, layer: Layer, close: () -> Unit, rename: ()
     val i = doc.indexOf(layer)
     val sib = doc.children(layer.parentId)
     val below = sib.getOrNull(sib.indexOf(layer) - 1)
-    item("이름 변경", close = close) { rename() }
+    item(L.t("이름 변경"), close = close) { rename() }
     if (layer.isText) {
-        item("텍스트 편집", close = close) { ed.beginTextEdit(layer) }
-        item("래스터화", close = close) { ed.rasterizeText(layer) }
+        item(L.t("텍스트 편집"), close = close) { ed.beginTextEdit(layer) }
+        item(L.t("래스터화"), close = close) { ed.rasterizeText(layer) }
     }
-    item("선택", close = close) { ed.selectLayerAlpha(layer) }
-    item("복사", close = close) { ed.copy() }
-    item("레이어 채우기", close = close) { ed.fillLayer(layer) }
-    item("지우기", close = close) { ed.clearLayer(layer) }
+    item(L.t("선택"), close = close) { ed.selectLayerAlpha(layer) }
+    item(L.t("복사"), close = close) { ed.copy() }
+    item(L.t("레이어 채우기"), close = close) { ed.fillLayer(layer) }
+    item(L.t("지우기"), close = close) { ed.clearLayer(layer) }
     HorizontalDivider()
-    item("알파 채널 잠금", layer.alphaLock, close = close) { ed.toggleAlphaLock(layer) }
-    item(if (layer.mask != null) "마스크 편집" else "마스크", close = close) { ed.addMask(layer) }
-    item("클리핑 마스크", layer.clipping, enabled = below != null, close = close) { ed.toggleClipping(layer) }
-    item("반전", close = close) { ed.invertLayer(layer) }
-    item("참조", layer.isReference, close = close) { ed.toggleReference(layer) }
-    item("비공개", layer.isPrivate, close = close) { ed.togglePrivate(layer) }
-    item("잠금", layer.locked, close = close) { ed.toggleLock(layer) }
+    item(L.t("알파 채널 잠금"), layer.alphaLock, close = close) { ed.toggleAlphaLock(layer) }
+    item(if (layer.mask != null) L.t("마스크 편집") else L.t("마스크"), close = close) { ed.addMask(layer) }
+    item(L.t("클리핑 마스크"), layer.clipping, enabled = below != null, close = close) { ed.toggleClipping(layer) }
+    item(L.t("반전"), close = close) { ed.invertLayer(layer) }
+    item(L.t("참조"), layer.isReference, close = close) { ed.toggleReference(layer) }
+    item(L.t("비공개"), layer.isPrivate, close = close) { ed.togglePrivate(layer) }
+    item(L.t("잠금"), layer.locked, close = close) { ed.toggleLock(layer) }
     HorizontalDivider()
-    item("아래 레이어와 병합", enabled = below != null && !below.isGroup, close = close) { ed.mergeDown(i) }
-    item("아래 레이어와 결합 (그룹)", enabled = below != null, close = close) { below?.let { ed.createGroup(listOf(it, layer)) } }
-    item("복제", close = close) { ed.duplicateLayer(i) }
-    item("가로로 뒤집기", close = close) { ed.flipLayer(true) }
-    item("세로로 뒤집기", close = close) { ed.flipLayer(false) }
-    item("삭제", close = close) { ed.deleteLayer(i) }
+    item(L.t("아래 레이어와 병합"), enabled = below != null && !below.isGroup, close = close) { ed.mergeDown(i) }
+    item(L.t("아래 레이어와 결합 (그룹)"), enabled = below != null, close = close) { below?.let { ed.createGroup(listOf(it, layer)) } }
+    item(L.t("복제"), close = close) { ed.duplicateLayer(i) }
+    item(L.t("가로로 뒤집기"), close = close) { ed.flipLayer(true) }
+    item(L.t("세로로 뒤집기"), close = close) { ed.flipLayer(false) }
+    item(L.t("삭제"), close = close) { ed.deleteLayer(i) }
 }
 
 @Composable
 private fun GroupOptions(ed: Editor, g: Layer, close: () -> Unit, rename: () -> Unit) {
     val i = ed.doc.indexOf(g)
-    item("이름 변경", close = close) { rename() }
-    item("선택", close = close) { ed.selectLayerAlpha(g) }
-    item("복사", close = close) { ed.copy() }
+    item(L.t("이름 변경"), close = close) { rename() }
+    item(L.t("선택"), close = close) { ed.selectLayerAlpha(g) }
+    item(L.t("복사"), close = close) { ed.copy() }
     HorizontalDivider()
-    item(if (g.mask != null) "마스크 편집" else "마스크", close = close) { ed.addMask(g) }
-    item("비공개", g.isPrivate, close = close) { ed.togglePrivate(g) }
-    item("잠금", g.locked, close = close) { ed.toggleLock(g) }
+    item(if (g.mask != null) L.t("마스크 편집") else L.t("마스크"), close = close) { ed.addMask(g) }
+    item(L.t("비공개"), g.isPrivate, close = close) { ed.togglePrivate(g) }
+    item(L.t("잠금"), g.locked, close = close) { ed.toggleLock(g) }
     HorizontalDivider()
-    item("그룹 병합", close = close) { ed.flattenGroup(g) }
-    item("그룹 해제", close = close) { ed.ungroup(g) }
-    item("복제", close = close) { ed.duplicateLayer(i) }
-    item("가로로 뒤집기", close = close) { ed.flipLayer(true) }
-    item("세로로 뒤집기", close = close) { ed.flipLayer(false) }
-    item("삭제", close = close) { ed.deleteLayer(i) }
+    item(L.t("그룹 병합"), close = close) { ed.flattenGroup(g) }
+    item(L.t("그룹 해제"), close = close) { ed.ungroup(g) }
+    item(L.t("복제"), close = close) { ed.duplicateLayer(i) }
+    item(L.t("가로로 뒤집기"), close = close) { ed.flipLayer(true) }
+    item(L.t("세로로 뒤집기"), close = close) { ed.flipLayer(false) }
+    item(L.t("삭제"), close = close) { ed.deleteLayer(i) }
 }
 
 @Composable
 private fun MaskOptions(ed: Editor, owner: Layer, close: () -> Unit) {
     val m = owner.mask ?: return
-    item("마스크 반전", close = close) { ed.invertLayer(m) }
-    item("마스크 초기화", close = close) { ed.clearLayer(m) }
-    item("마스크에서 선택", close = close) { ed.selectLayerAlpha(m) }
-    item("마스크 적용", enabled = !owner.isGroup, close = close) { ed.applyMask(owner) }
-    item("마스크 삭제", close = close) { ed.deleteMask(owner) }
+    item(L.t("마스크 반전"), close = close) { ed.invertLayer(m) }
+    item(L.t("마스크 초기화"), close = close) { ed.clearLayer(m) }
+    item(L.t("마스크에서 선택"), close = close) { ed.selectLayerAlpha(m) }
+    item(L.t("마스크 적용"), enabled = !owner.isGroup, close = close) { ed.applyMask(owner) }
+    item(L.t("마스크 삭제"), close = close) { ed.deleteMask(owner) }
 }
 
 @Composable
@@ -430,8 +432,8 @@ private fun BackgroundRow(ed: Editor) {
             .border(1.dp, Color(0x55FFFFFF), RoundedCornerShape(6.dp)).combinedClickableCompat { pick = true })
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text("배경 색상", color = UI.text, fontSize = 14.sp)
-            Text("탭: 색상 선택 · 체크 해제: 투명 배경", color = UI.text2, fontSize = 11.sp)
+            Text(L.t("배경 색상"), color = UI.text, fontSize = 14.sp)
+            Text(L.t("탭: 색상 선택 · 체크 해제: 투명 배경"), color = UI.text2, fontSize = 11.sp)
         }
         Box(
             Modifier.size(30.dp).clip(RoundedCornerShape(6.dp)).border(1.5.dp, Color.White.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
@@ -442,7 +444,7 @@ private fun BackgroundRow(ed: Editor) {
     }
     if (pick) AlertDialog(
         onDismissRequest = { pick = false },
-        title = { Text("배경 색상") },
+        title = { Text(L.t("배경 색상")) },
         text = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(ed.color, 0xFFFFFFFF.toInt(), 0xFFF4EFE6.toInt(), 0xFF808080.toInt(), 0xFF000000.toInt()).forEach { c ->
@@ -451,7 +453,7 @@ private fun BackgroundRow(ed: Editor) {
                 }
             }
         },
-        confirmButton = { TextButton({ pick = false }) { Text("닫기") } },
+        confirmButton = { TextButton({ pick = false }) { Text(L.t("닫기")) } },
     )
 }
 

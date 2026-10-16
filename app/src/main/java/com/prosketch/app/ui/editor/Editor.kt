@@ -1,5 +1,7 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.L
+
 import android.app.ActivityManager
 import android.content.Context
 import android.graphics.Bitmap
@@ -76,7 +78,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 
-enum class Tool(val label: String) { BRUSH("페인트"), SMUDGE("문지르기"), ERASER("지우기") }
+enum class Tool(val label: String) { BRUSH(L.t("페인트")), SMUDGE(L.t("문지르기")), ERASER(L.t("지우기")) }
 enum class Mode { PAINT, SELECT, TRANSFORM, ADJUST, LIQUIFY, GUIDE_EDIT }
 enum class Panel { BRUSHES, LAYERS, COLOR, ACTIONS, ADJUSTMENTS, BRUSH_STUDIO, HISTORY }
 
@@ -137,8 +139,8 @@ class Editor(
     var grayscaleView by mutableStateOf(false)
     var mirrorRequest: ((Boolean) -> Unit)? = null
 
-    fun toggleMirrorView() { mirrorView = !mirrorView; mirrorRequest?.invoke(mirrorView); hud(if (mirrorView) "좌우 반전 보기 (그림은 그대로)" else "좌우 반전 보기 끔") }
-    fun toggleGrayscaleView() { grayscaleView = !grayscaleView; invalidate(); hud(if (grayscaleView) "흑백 보기: 명암 확인" else "흑백 보기 끔") }
+    fun toggleMirrorView() { mirrorView = !mirrorView; mirrorRequest?.invoke(mirrorView); hud(if (mirrorView) L.t("좌우 반전 보기 (그림은 그대로)") else L.t("좌우 반전 보기 끔")) }
+    fun toggleGrayscaleView() { grayscaleView = !grayscaleView; invalidate(); hud(if (grayscaleView) L.t("흑백 보기: 명암 확인") else L.t("흑백 보기 끔")) }
 
     /** Undo or redo until [doneCount] steps remain done (history panel). */
     fun jumpHistory(doneCount: Int) {
@@ -147,7 +149,7 @@ class Editor(
         var guard = 300
         while (history.size > doneCount && guard-- > 0) history.undo() ?: break
         while (history.size < doneCount && guard-- > 0) history.redo() ?: break
-        hud("작업 내역: ${history.size}단계")
+        hud(L.tf("작업 내역: {0}단계", history.size))
         bump()
     }
 
@@ -187,7 +189,7 @@ class Editor(
     init {
         history.listener = { canUndo = history.canUndo; canRedo = history.canRedo }
         loadToolState()
-        if (doc.layers.isEmpty()) doc.layers.add(Layer.blank(doc.width, doc.height, "레이어 1"))
+        if (doc.layers.isEmpty()) doc.layers.add(Layer.blank(doc.width, doc.height, L.t("레이어 1")))
     }
 
     // ------------------------------------------------------------------ HistoryHost
@@ -209,6 +211,25 @@ class Editor(
     }
 
     fun hud(text: String, action: Pair<String, () -> Unit>? = null) { hud = Hud(text, action = action) }
+
+    /**
+     * Runs [block], turning an OutOfMemoryError (very large canvases, many layers) into a message
+     * instead of a crash.
+     */
+    inline fun <T> safely(what: String, block: () -> T): T? = try { block() } catch (e: OutOfMemoryError) {
+        System.gc()
+        hud(L.tf("메모리가 부족해 {0} 작업을 할 수 없습니다. 레이어 수나 캔버스 크기를 줄여 보세요", what))
+        null
+    }
+
+    /** Synchronous save used when the app is about to die (uncaught exception). */
+    fun emergencySave() {
+        runCatching {
+            if (strokeActive) cancelStroke()
+            val thumb = Compositor.flatten(doc, min(1f, 640f / max(doc.width, doc.height)), publicHook)
+            store.write(store.snapshot(doc, thumb))
+        }
+    }
 
     // ------------------------------------------------------------------ tools & brushes
     private fun loadToolState() {
@@ -286,7 +307,7 @@ class Editor(
         prefs.recentColors = l
     }
 
-    fun swapWithPrevious() { val p = previousColor; previousColor = color; setColor(p, commitHistory = false); hud("이전 색상") }
+    fun swapWithPrevious() { val p = previousColor; previousColor = color; setColor(p, commitHistory = false); hud(L.t("이전 색상")) }
 
     // ------------------------------------------------------------------ stroke handling
     private var stroke: BrushStroke? = null
@@ -309,9 +330,9 @@ class Editor(
 
     fun canPaint(): Boolean {
         val l = doc.active ?: return false
-        if (l.isGroup) { hud("그룹에는 그릴 수 없습니다. 그룹 안의 레이어를 선택하세요"); return false }
-        if (!doc.effectiveVisible(l)) { hud("숨겨진 레이어에는 그릴 수 없습니다"); return false }
-        if (doc.effectiveLocked(l)) { hud("잠긴 레이어입니다"); return false }
+        if (l.isGroup) { hud(L.t("그룹에는 그릴 수 없습니다. 그룹 안의 레이어를 선택하세요")); return false }
+        if (!doc.effectiveVisible(l)) { hud(L.t("숨겨진 레이어에는 그릴 수 없습니다")); return false }
+        if (doc.effectiveLocked(l)) { hud(L.t("잠긴 레이어입니다")); return false }
         if (l.isText) rasterizeText(l)
         return true
     }
@@ -396,7 +417,7 @@ class Editor(
                 val before = smudgeBefore
                 if (r != null && before != null) {
                     r.intersect(0, 0, doc.width, doc.height)
-                    history.push(PixelEntry("문지르기", layer, r, Bitmaps.crop(before, r), Bitmaps.crop(layer.bitmap, r)))
+                    history.push(PixelEntry(L.t("문지르기"), layer, r, Bitmaps.crop(before, r), Bitmaps.crop(layer.bitmap, r)))
                     layer.touch(); doc.strokeCount++
                     afterCommit()
                 }
@@ -407,7 +428,7 @@ class Editor(
                 if (assist != null && pendingAssist.isNotEmpty()) for (q in pendingAssist) feed(q)
                 s.end()
             }
-            commitStroke(layer ?: return, s, if (qs != null) "QuickShape" else if (strokeKind == StrokeKind.ERASE) "지우기" else "브러시")
+            commitStroke(layer ?: return, s, if (qs != null) "QuickShape" else if (strokeKind == StrokeKind.ERASE) L.t("지우기") else L.t("브러시"))
         } finally {
             smudgeBefore?.recycle(); smudgeBefore = null
             stroke = null; smudge = null; strokeLayer = null; quickShape = null; assist = null
@@ -491,7 +512,7 @@ class Editor(
         val qs = quickShape ?: return
         qs.perfect = !qs.perfect
         lastRaw?.let { adjustQuickShape(PointF(it.x, it.y)) } ?: renderQuickShape()
-        hud(if (qs.perfect) "완벽한 ${qs.current.label}" else qs.shape.label)
+        hud(if (qs.perfect) L.tf("완벽한 {0}", qs.current.label) else qs.shape.label)
     }
 
     private fun adjustQuickShape(p: PointF) {
@@ -565,7 +586,7 @@ class Editor(
     fun colorDropAdjust(dxFraction: Float) {
         if (fillPoint == null) return
         fillThreshold = (fillThreshold + dxFraction).coerceIn(0f, 1f)
-        hud("ColorDrop 임계값: ${(fillThreshold * 100).toInt()}%")
+        hud(L.tf("ColorDrop 임계값: {0}%", (fillThreshold * 100).toInt()))
         recomputeFill()
     }
 
@@ -622,7 +643,7 @@ class Editor(
         }
         prefs.colorDropThreshold = fillThreshold
         endFill()
-        if (!continueFill) hud("ColorDrop", "계속 채우기" to { continueFill = true; hud("탭하여 계속 채우기") })
+        if (!continueFill) hud("ColorDrop", L.t("계속 채우기") to { continueFill = true; hud(L.t("탭하여 계속 채우기")) })
     }
 
     fun endFill() {
@@ -654,17 +675,17 @@ class Editor(
 
     fun nextLayerName(): String {
         var n = doc.layers.count { !it.isGroup } + 1
-        while (doc.layers.any { it.name == "레이어 $n" }) n++
-        return "레이어 $n"
+        while (doc.layers.any { it.name == L.tf("레이어 {0}", n) }) n++
+        return L.tf("레이어 {0}", n)
     }
 
     fun checkLayerLimit(extra: Int = 1): Boolean {
-        if (doc.pixelBudgetUsed() + extra > maxLayers) { hud("최대 레이어 수(${maxLayers}개)에 도달했습니다"); return false }
+        if (doc.pixelBudgetUsed() + extra > maxLayers) { hud(L.tf("최대 레이어 수({0}개)에 도달했습니다", maxLayers)); return false }
         return true
     }
 
     /** Adds [layer] (a new blank one by default) above the active layer, inside an open active group. */
-    fun addLayer(layer: Layer? = null, label: String = "새 레이어"): Layer? {
+    private fun addLayerImpl(layer: Layer? = null, label: String = L.t("새 레이어")): Layer? {
         if (!checkLayerLimit(if (layer?.isGroup == true) 0 else 1)) return null
         val before = snap()
         val l = layer ?: Layer.blank(doc.width, doc.height, nextLayerName())
@@ -717,7 +738,7 @@ class Editor(
         if (doc.layers.filter { !it.isGroup }.all { it in remove }) {
             // keep at least one layer: clear it instead
             if (targets.size == 1 && !targets[0].isGroup) { clearLayer(targets[0]); return }
-            hud("마지막 레이어는 삭제할 수 없습니다"); return
+            hud(L.t("마지막 레이어는 삭제할 수 없습니다")); return
         }
         val before = snap()
         val active = doc.activeLayer
@@ -726,7 +747,7 @@ class Editor(
         doc.activeIndex = if (active != null && active !in remove) doc.layers.indexOf(active) else (lowest - 1).coerceIn(0, doc.layers.size - 1)
         doc.editMask = false
         if (soloLayer in remove) soloLayer = null
-        pushStructure(if (remove.size > 1) "레이어 ${targets.size}개 삭제" else "레이어 삭제", before)
+        pushStructure(if (remove.size > 1) L.tf("레이어 {0}개 삭제", targets.size) else L.t("레이어 삭제"), before)
     }
 
     /** Copies the layer or group at [i] with all descendants (new ids, parents remapped). */
@@ -738,7 +759,7 @@ class Editor(
         return copies
     }
 
-    fun duplicateLayer(i: Int) {
+    private fun duplicateLayerImpl(i: Int) {
         val src = doc.layers.getOrNull(i) ?: return
         val range = doc.blockRange(i)
         if (!checkLayerLimit(range.sumOf { k -> doc.layers[k].let { (if (it.isGroup) 0 else 1) + (if (it.mask != null) 1 else 0) } })) return
@@ -746,7 +767,7 @@ class Editor(
         val copies = copyBlock(i)
         doc.layers.addAll(range.last + 1, copies)
         doc.activeIndex = range.last + copies.size
-        pushStructure(if (src.isGroup) "그룹 복제" else "레이어 복제", before)
+        pushStructure(if (src.isGroup) L.t("그룹 복제") else L.t("레이어 복제"), before)
     }
 
     /**
@@ -778,7 +799,7 @@ class Editor(
         block.last().parentId = parent
         doc.layers.addAll(at.coerceIn(0, doc.layers.size), block)
         doc.activeIndex = doc.layers.indexOf(active).coerceAtLeast(0)
-        pushStructure("레이어 이동", before)
+        pushStructure(L.t("레이어 이동"), before)
     }
 
     /** Visible rows of the layers panel, top → bottom (children of collapsed groups hidden). */
@@ -828,13 +849,13 @@ class Editor(
         return m
     }
 
-    fun mergeDown(i: Int) {
+    private fun mergeDownImpl(i: Int) {
         val top = doc.layers.getOrNull(i) ?: return
         if (top.isGroup) { flattenGroup(top); return }
         val sib = doc.children(top.parentId)
-        val below = sib.getOrNull(sib.indexOf(top) - 1) ?: run { hud("아래에 병합할 레이어가 없습니다"); return }
-        if (below.isGroup) { hud("그룹과는 병합할 수 없습니다"); return }
-        if (doc.effectiveLocked(top) || doc.effectiveLocked(below)) { hud("잠긴 레이어입니다"); return }
+        val below = sib.getOrNull(sib.indexOf(top) - 1) ?: run { hud(L.t("아래에 병합할 레이어가 없습니다")); return }
+        if (below.isGroup) { hud(L.t("그룹과는 병합할 수 없습니다")); return }
+        if (doc.effectiveLocked(top) || doc.effectiveLocked(below)) { hud(L.t("잠긴 레이어입니다")); return }
         val before = snap()
         val base = Compositor.renderNode(doc, below)
         val c = Canvas(base)
@@ -852,11 +873,11 @@ class Editor(
         doc.layers.remove(top)
         doc.activeIndex = doc.layers.indexOf(merged)
         doc.editMask = false
-        pushStructure("아래 레이어와 병합", before)
+        pushStructure(L.t("아래 레이어와 병합"), before)
     }
 
     /** Turns a group into one pixel layer with the same look (its blend/opacity stay as layer properties). */
-    fun flattenGroup(g: Layer) {
+    private fun flattenGroupImpl(g: Layer) {
         val gi = doc.layers.indexOf(g)
         if (gi < 0 || !g.isGroup) return
         val before = snap()
@@ -870,7 +891,7 @@ class Editor(
         doc.layers.removeAll(blockSet)
         doc.layers.add(range.first.coerceIn(0, doc.layers.size), l)
         doc.activeIndex = doc.layers.indexOf(l)
-        pushStructure("그룹 병합", before)
+        pushStructure(L.t("그룹 병합"), before)
     }
 
     /** Pinch-merge / "Merge" on a multi-selection: everything between merges into one layer. */
@@ -883,10 +904,10 @@ class Editor(
 
     fun mergeSelected() = mergeLayers(selectedLayers())
 
-    fun mergeLayers(targets: List<Layer>) {
+    private fun mergeLayersImpl(targets: List<Layer>) {
         val list = targets.filter { it in doc.layers }.sortedBy { doc.layers.indexOf(it) }
-        if (list.size < 2) { hud("병합하려면 레이어를 두 개 이상 선택하세요"); return }
-        if (list.any { doc.effectiveLocked(it) }) { hud("잠긴 레이어입니다"); return }
+        if (list.size < 2) { hud(L.t("병합하려면 레이어를 두 개 이상 선택하세요")); return }
+        if (list.any { doc.effectiveLocked(it) }) { hud(L.t("잠긴 레이어입니다")); return }
         val before = snap()
         val visibleOnes = list.filter { it.visible }
         val px = composite(visibleOnes)
@@ -899,7 +920,7 @@ class Editor(
         doc.layers.add(at.coerceIn(0, doc.layers.size), l)
         doc.activeIndex = doc.layers.indexOf(l)
         doc.editMask = false
-        pushStructure("레이어 병합", before)
+        pushStructure(L.t("레이어 병합"), before)
     }
 
     // ---- groups
@@ -915,14 +936,14 @@ class Editor(
         doc.activeIndex = doc.layers.indexOf(g)
         doc.editMask = false
         secondary.clear()
-        pushStructure("그룹", before)
-        hud("새 그룹")
+        pushStructure(L.t("그룹"), before)
+        hud(L.t("새 그룹"))
     }
 
     private fun nextGroupName(): String {
         var n = doc.layers.count { it.isGroup } + 1
-        while (doc.layers.any { it.name == "새 그룹 $n" }) n++
-        return if (n == 1) "새 그룹" else "새 그룹 $n"
+        while (doc.layers.any { it.name == L.tf("새 그룹 {0}", n) }) n++
+        return if (n == 1) L.t("새 그룹") else L.tf("새 그룹 {0}", n)
     }
 
     fun ungroup(g: Layer) {
@@ -932,15 +953,15 @@ class Editor(
         kids.forEach { it.parentId = g.parentId }
         doc.layers.remove(g)
         doc.activeIndex = kids.lastOrNull()?.let { doc.layers.indexOf(it) } ?: doc.activeIndex.coerceIn(0, doc.layers.size - 1)
-        pushStructure("그룹 해제", before)
+        pushStructure(L.t("그룹 해제"), before)
     }
 
     fun toggleExpanded(g: Layer) { g.expanded = !g.expanded; version++ }
 
-    fun setPassThrough(g: Layer, on: Boolean) = changeProps(g, "혼합 모드") { it.passThrough = on }
+    fun setPassThrough(g: Layer, on: Boolean) = changeProps(g, L.t("혼합 모드")) { it.passThrough = on }
 
     // ---- masks
-    fun addMask(target: Layer? = doc.activeLayer) {
+    private fun addMaskImpl(target: Layer? = doc.activeLayer) {
         val l = target ?: return
         if (l.mask != null) { selectLayer(doc.indexOf(l), mask = true); return }
         if (!checkLayerLimit()) return
@@ -948,8 +969,8 @@ class Editor(
         l.mask = Layer.whiteMask(doc.width, doc.height)
         doc.activeIndex = doc.indexOf(l)
         doc.editMask = true
-        pushStructure("마스크", before)
-        hud("레이어 마스크: 검은색으로 가리고 흰색으로 드러냅니다")
+        pushStructure(L.t("마스크"), before)
+        hud(L.t("레이어 마스크: 검은색으로 가리고 흰색으로 드러냅니다"))
     }
 
     fun deleteMask(l: Layer) {
@@ -957,13 +978,13 @@ class Editor(
         val before = snap()
         l.mask = null
         doc.editMask = false
-        pushStructure("마스크 삭제", before)
+        pushStructure(L.t("마스크 삭제"), before)
     }
 
     /** Bakes the mask into the layer's pixels. */
     fun applyMask(l: Layer) {
         val m = l.mask ?: return
-        if (l.isGroup) { hud("그룹 마스크는 그룹을 병합할 때 적용됩니다"); return }
+        if (l.isGroup) { hud(L.t("그룹 마스크는 그룹을 병합할 때 적용됩니다")); return }
         val before = snap()
         val px = l.bitmap.copy(Bitmap.Config.ARGB_8888, true)
         Canvas(px).drawBitmap(m.bitmap, 0f, 0f, Compositor.maskPaint)
@@ -972,7 +993,7 @@ class Editor(
         doc.layers[i] = nl
         doc.activeIndex = i
         doc.editMask = false
-        pushStructure("마스크 적용", before)
+        pushStructure(L.t("마스크 적용"), before)
     }
 
     // ---- properties
@@ -994,35 +1015,35 @@ class Editor(
     fun commitOpacity(layer: Layer) {
         val b = opacityStart ?: return
         opacityStart = null
-        history.push(PropsEntry("불투명도", layer, b, layer.props()))
+        history.push(PropsEntry(L.t("불투명도"), layer, b, layer.props()))
         bump()
     }
 
-    fun setBlend(layer: Layer, m: LayerBlend) = changeProps(layer, "혼합 모드") { it.blend = m; if (it.isGroup) it.passThrough = false }
-    fun toggleVisible(layer: Layer) = changeProps(layer, "가시성") { it.visible = !it.visible }
+    fun setBlend(layer: Layer, m: LayerBlend) = changeProps(layer, L.t("혼합 모드")) { it.blend = m; if (it.isGroup) it.passThrough = false }
+    fun toggleVisible(layer: Layer) = changeProps(layer, L.t("가시성")) { it.visible = !it.visible }
     fun toggleAlphaLock(layer: Layer) {
-        if (layer.isGroup) { hud("그룹에는 알파 채널 잠금을 쓸 수 없습니다"); return }
-        changeProps(layer, "알파 채널 잠금") { it.alphaLock = !it.alphaLock }; hud(if (layer.alphaLock) "알파 채널 잠금 켬" else "알파 채널 잠금 끔")
+        if (layer.isGroup) { hud(L.t("그룹에는 알파 채널 잠금을 쓸 수 없습니다")); return }
+        changeProps(layer, L.t("알파 채널 잠금")) { it.alphaLock = !it.alphaLock }; hud(if (layer.alphaLock) L.t("알파 채널 잠금 켬") else L.t("알파 채널 잠금 끔"))
     }
-    fun toggleLock(layer: Layer) { changeProps(layer, "레이어 잠금") { it.locked = !it.locked }; hud(if (layer.locked) "레이어 잠김" else "레이어 잠금 해제") }
-    fun togglePrivate(layer: Layer) { changeProps(layer, "비공개 레이어") { it.isPrivate = !it.isPrivate }; hud(if (layer.isPrivate) "비공개: 타임랩스와 미리보기에서 제외" else "비공개 해제") }
+    fun toggleLock(layer: Layer) { changeProps(layer, L.t("레이어 잠금")) { it.locked = !it.locked }; hud(if (layer.locked) L.t("레이어 잠김") else L.t("레이어 잠금 해제")) }
+    fun togglePrivate(layer: Layer) { changeProps(layer, L.t("비공개 레이어")) { it.isPrivate = !it.isPrivate }; hud(if (layer.isPrivate) L.t("비공개: 타임랩스와 미리보기에서 제외") else L.t("비공개 해제")) }
     fun toggleClipping(layer: Layer) {
-        if (layer.isGroup) { hud("그룹은 클리핑 마스크가 될 수 없습니다"); return }
+        if (layer.isGroup) { hud(L.t("그룹은 클리핑 마스크가 될 수 없습니다")); return }
         val sib = doc.children(layer.parentId)
-        if (sib.indexOf(layer) <= 0) { hud("아래에 레이어가 있어야 클리핑 마스크를 만들 수 있습니다"); return }
-        changeProps(layer, "클리핑 마스크") { it.clipping = !it.clipping }
+        if (sib.indexOf(layer) <= 0) { hud(L.t("아래에 레이어가 있어야 클리핑 마스크를 만들 수 있습니다")); return }
+        changeProps(layer, L.t("클리핑 마스크")) { it.clipping = !it.clipping }
     }
     fun toggleReference(layer: Layer) {
         val wasRef = layer.isReference
-        doc.layers.forEach { if (it.isReference && it !== layer) changeProps(it, "참조") { l -> l.isReference = false } }
-        changeProps(layer, "참조") { it.isReference = !wasRef }
-        hud(if (layer.isReference) "참조 레이어로 설정" else "참조 해제")
+        doc.layers.forEach { if (it.isReference && it !== layer) changeProps(it, L.t("참조")) { l -> l.isReference = false } }
+        changeProps(layer, L.t("참조")) { it.isReference = !wasRef }
+        hud(if (layer.isReference) L.t("참조 레이어로 설정") else L.t("참조 해제"))
     }
-    fun rename(layer: Layer, name: String) = changeProps(layer, "이름 변경") { it.name = name.ifBlank { it.name } }
+    fun rename(layer: Layer, name: String) = changeProps(layer, L.t("이름 변경")) { it.name = name.ifBlank { it.name } }
 
     fun soloToggle(layer: Layer) {
         soloLayer = if (soloLayer === layer) null else layer
-        hud(if (soloLayer != null) "단독 가시성 켬" else "단독 가시성 끔")
+        hud(if (soloLayer != null) L.t("단독 가시성 켬") else L.t("단독 가시성 끔"))
         version++; invalidate()
     }
 
@@ -1051,8 +1072,8 @@ class Editor(
 
     private fun editable(l: Layer?): Layer? {
         if (l == null) return null
-        if (l.isGroup) { hud("그룹 안의 레이어를 선택하세요"); return null }
-        if (doc.effectiveLocked(l)) { hud("잠긴 레이어입니다"); return null }
+        if (l.isGroup) { hud(L.t("그룹 안의 레이어를 선택하세요")); return null }
+        if (doc.effectiveLocked(l)) { hud(L.t("잠긴 레이어입니다")); return null }
         return l
     }
 
@@ -1060,17 +1081,17 @@ class Editor(
         val l = editable(target) ?: return
         val sel = selection
         if (l.isMask) {
-            editPixels(l, "마스크 초기화", sel?.let { Bitmaps.maskBounds(it) } ?: doc.bounds()) { c ->
+            editPixels(l, L.t("마스크 초기화"), sel?.let { Bitmaps.maskBounds(it) } ?: doc.bounds()) { c ->
                 if (sel != null) { c.saveLayer(null, null); c.drawColor(Color.WHITE); c.drawBitmap(sel, 0f, 0f, dstIn); c.restore() } else c.drawColor(Color.WHITE)
             }
-            hud("마스크 초기화"); return
+            hud(L.t("마스크 초기화")); return
         }
         val r = sel?.let { Bitmaps.maskBounds(it) } ?: Bitmaps.opaqueBounds(l.bitmap) ?: return
-        editPixels(l, "지우기", r) { c ->
+        editPixels(l, L.t("지우기"), r) { c ->
             if (sel != null) c.drawBitmap(sel, 0f, 0f, Paint().apply { blendMode = BlendMode.DST_OUT })
             else c.drawColor(0, BlendMode.CLEAR)
         }
-        hud(if (sel != null) "선택 영역 지우기" else "레이어 지우기")
+        hud(if (sel != null) L.t("선택 영역 지우기") else L.t("레이어 지우기"))
     }
 
     fun clearLayer(i: Int) = clearLayer(doc.layers.getOrNull(i))
@@ -1079,7 +1100,7 @@ class Editor(
         val l = editable(target) ?: return
         val c = if (l.isMask) paintColorFor(l) else c0
         val sel = selection
-        editPixels(l, "레이어 채우기", sel?.let { Bitmaps.maskBounds(it) } ?: Rect(0, 0, doc.width, doc.height)) { cv ->
+        editPixels(l, L.t("레이어 채우기"), sel?.let { Bitmaps.maskBounds(it) } ?: Rect(0, 0, doc.width, doc.height)) { cv ->
             val p = Paint().apply {
                 this.color = c
                 blendMode = if (l.alphaLock) BlendMode.SRC_ATOP else BlendMode.SRC_OVER
@@ -1101,7 +1122,7 @@ class Editor(
         val px = IntArray(w * h)
         l.bitmap.getPixels(px, 0, w, 0, 0, w, h)
         for (k in px.indices) { val c = px[k]; px[k] = (c and 0xFF000000.toInt()) or (c.inv() and 0x00FFFFFF) }
-        editPixels(l, "반전") { _ -> l.bitmap.setPixels(px, 0, w, 0, 0, w, h) }
+        editPixels(l, L.t("반전")) { _ -> l.bitmap.setPixels(px, 0, w, 0, 0, w, h) }
     }
 
     fun invertLayer(i: Int) = invertLayer(doc.layers.getOrNull(i))
@@ -1115,9 +1136,9 @@ class Editor(
             l.isGroup -> Compositor.renderNode(doc, l)
             else -> l.bitmap
         }
-        applySelection(SelectionOps.fromAlpha(src), record = true, label = "레이어 선택")
+        applySelection(SelectionOps.fromAlpha(src), record = true, label = L.t("레이어 선택"))
         if (src !== l.bitmap) src.recycle()
-        hud("레이어 내용 선택됨")
+        hud(L.t("레이어 내용 선택됨"))
     }
 
     fun selectLayerAlpha(i: Int) = selectLayerAlpha(doc.layers.getOrNull(i))
@@ -1125,9 +1146,9 @@ class Editor(
     // ---- text layers
     fun addTextLayer(spec: TextSpec) {
         if (spec.text.isBlank()) return
-        val l = Layer(TextRenderer.render(spec, doc.width, doc.height), spec.text.lineSequence().first().take(24).ifBlank { "텍스트" })
+        val l = Layer(TextRenderer.render(spec, doc.width, doc.height), spec.text.lineSequence().first().take(24).ifBlank { L.t("텍스트") })
         l.text = spec
-        addLayer(l, "텍스트 추가")
+        addLayer(l, L.t("텍스트 추가"))
     }
 
     fun updateText(l: Layer, spec: TextSpec) {
@@ -1137,8 +1158,8 @@ class Editor(
         Bitmaps.paste(l.bitmap, px, 0, 0); px.recycle()
         l.text = spec
         val autoName = before == null || l.name == before.text.lineSequence().first().take(24)
-        if (autoName) l.name = spec.text.lineSequence().first().take(24).ifBlank { "텍스트" }
-        history.push(TextEntry("텍스트 편집", l, before, beforePx, spec, l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+        if (autoName) l.name = spec.text.lineSequence().first().take(24).ifBlank { L.t("텍스트") }
+        history.push(TextEntry(L.t("텍스트 편집"), l, before, beforePx, spec, l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
         l.touch(); afterCommit()
     }
 
@@ -1149,11 +1170,11 @@ class Editor(
         private set
 
     /** Actions › Add › Add text: a new text layer in the middle of the canvas, opened for editing. */
-    fun startNewText() {
+    private fun startNewTextImpl() {
         exitModes()
         panel = null
         val size = max(24f, max(doc.width, doc.height) / 16f)
-        var spec = TextSpec("텍스트", size = size, color = color)
+        var spec = TextSpec(L.t("텍스트"), size = size, color = color)
         val (w, h) = TextRenderer.boxSize(spec)
         spec = spec.copy(x = (doc.width - w) / 2f, y = (doc.height - h) / 2f)
         addTextLayer(spec)
@@ -1163,7 +1184,7 @@ class Editor(
 
     fun beginTextEdit(l: Layer, isNew: Boolean = false) {
         if (!l.isText) return
-        if (doc.effectiveLocked(l)) { hud("잠긴 레이어입니다"); return }
+        if (doc.effectiveLocked(l)) { hud(L.t("잠긴 레이어입니다")); return }
         textEditing?.let { endTextEdit(true) }
         exitModes()
         panel = null
@@ -1195,9 +1216,9 @@ class Editor(
             return
         }
         if (spec == null || orig == null || origPx == null || spec == orig) { bump(); return }
-        val autoName = l.name == orig.text.lineSequence().first().take(24) || l.name == "텍스트"
-        if (autoName) l.name = spec.text.lineSequence().first().take(24).ifBlank { "텍스트" }
-        history.push(TextEntry(if (textIsNew) "텍스트 추가" else "텍스트 편집", l, orig, origPx, spec, l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+        val autoName = l.name == orig.text.lineSequence().first().take(24) || l.name == L.t("텍스트")
+        if (autoName) l.name = spec.text.lineSequence().first().take(24).ifBlank { L.t("텍스트") }
+        history.push(TextEntry(if (textIsNew) L.t("텍스트 추가") else L.t("텍스트 편집"), l, orig, origPx, spec, l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
         l.touch()
         afterCommit()
     }
@@ -1206,14 +1227,14 @@ class Editor(
         val spec = l.text ?: return
         val px = l.bitmap.copy(Bitmap.Config.ARGB_8888, false)
         l.text = null
-        history.push(TextEntry("래스터화", l, spec, px, null, px))
+        history.push(TextEntry(L.t("래스터화"), l, spec, px, null, px))
         l.touch()
-        hud("텍스트를 래스터화했습니다")
+        hud(L.t("텍스트를 래스터화했습니다"))
         bump()
     }
 
     // ------------------------------------------------------------------ selection
-    fun applySelection(mask: Bitmap?, record: Boolean, label: String = "선택") {
+    fun applySelection(mask: Bitmap?, record: Boolean, label: String = L.t("선택")) {
         val before = selection
         val m = mask?.takeIf { !SelectionOps.isEmpty(it) }
         if (record && (before != null || m != null)) {
@@ -1225,7 +1246,7 @@ class Editor(
         invalidate()
     }
 
-    fun clearSelection(record: Boolean = true) { if (selection != null) applySelection(null, record, "선택 해제") }
+    fun clearSelection(record: Boolean = true) { if (selection != null) applySelection(null, record, L.t("선택 해제")) }
 
     // ------------------------------------------------------------------ clipboard (3-finger swipe menu)
     fun copy(all: Boolean = false): Boolean {
@@ -1236,30 +1257,30 @@ class Editor(
             act.isGroup -> Compositor.renderNode(doc, act)
             else -> act.bitmap
         }
-        val r = (sel?.let { Bitmaps.maskBounds(it) } ?: Bitmaps.opaqueBounds(src)) ?: run { hud("복사할 내용이 없습니다"); return false }
+        val r = (sel?.let { Bitmaps.maskBounds(it) } ?: Bitmaps.opaqueBounds(src)) ?: run { hud(L.t("복사할 내용이 없습니다")); return false }
         val crop = Bitmaps.crop(src, r)
         if (sel != null) Canvas(crop).drawBitmap(sel, -r.left.toFloat(), -r.top.toFloat(), dstIn)
         clipboard = ClipboardContent(crop, r.left, r.top)
         if (src !== act.bitmap) src.recycle()
-        hud(if (all) "모두 복사됨" else "복사됨")
+        hud(if (all) L.t("모두 복사됨") else L.t("복사됨"))
         return true
     }
 
-    fun cut() { if (doc.active?.isGroup == true) { hud("그룹은 잘라낼 수 없습니다"); return }; if (copy()) { clearLayer(); hud("잘라내기") } }
+    fun cut() { if (doc.active?.isGroup == true) { hud(L.t("그룹은 잘라낼 수 없습니다")); return }; if (copy()) { clearLayer(); hud(L.t("잘라내기")) } }
 
-    fun paste(name: String = "붙여넣기") {
-        val cb = clipboard ?: run { hud("클립보드가 비어 있습니다"); return }
+    fun paste(name: String = L.t("붙여넣기")) {
+        val cb = clipboard ?: run { hud(L.t("클립보드가 비어 있습니다")); return }
         val l = Layer.blank(doc.width, doc.height, name)
         Canvas(l.bitmap).drawBitmap(cb.bitmap, cb.left.toFloat(), cb.top.toFloat(), null)
-        addLayer(layer = l, label = "붙여넣기")
-        hud("붙여넣기")
+        addLayer(layer = l, label = L.t("붙여넣기"))
+        hud(L.t("붙여넣기"))
     }
 
-    fun duplicateSelection() { if (copy()) paste("선택에서") }
-    fun cutAndPaste() { if (doc.active?.isGroup == true) { hud("그룹은 잘라낼 수 없습니다"); return }; if (copy()) { clearLayer(); paste("선택에서") } }
+    fun duplicateSelection() { if (copy()) paste(L.t("선택에서")) }
+    fun cutAndPaste() { if (doc.active?.isGroup == true) { hud(L.t("그룹은 잘라낼 수 없습니다")); return }; if (copy()) { clearLayer(); paste(L.t("선택에서")) } }
 
     // ------------------------------------------------------------------ insert / text
-    fun insertImage(src: Bitmap, name: String = "삽입된 이미지", private: Boolean = false) {
+    private fun insertImageImpl(src: Bitmap, name: String = L.t("삽입된 이미지"), private: Boolean = false) {
         if (!checkLayerLimit()) return
         val s = min(1f, min(doc.width / src.width.toFloat(), doc.height / src.height.toFloat()))
         val w = max(1, (src.width * s).toInt()); val h = max(1, (src.height * s).toInt())
@@ -1273,7 +1294,7 @@ class Editor(
     }
 
     // ------------------------------------------------------------------ canvas operations
-    fun resizeCanvas(newW: Int, newH: Int, offX: Int, offY: Int, resample: Boolean) {
+    private fun resizeCanvasImpl(newW: Int, newH: Int, offX: Int, offY: Int, resample: Boolean) {
         if (newW == doc.width && newH == doc.height && offX == 0 && offY == 0) return
         exitModes()
         val targets = pixelTargets()
@@ -1289,13 +1310,13 @@ class Editor(
             else c.drawBitmap(l.bitmap, offX.toFloat(), offY.toFloat(), null)
             after[l] = nb
         }
-        val e = DocumentEntry(if (resample) "캔버스 크기 조정" else "자르기 및 크기 조정", doc.width to doc.height, before, newW to newH, after, beforeText, afterText)
+        val e = DocumentEntry(if (resample) L.t("캔버스 크기 조정") else L.t("자르기 및 크기 조정"), doc.width to doc.height, before, newW to newH, after, beforeText, afterText)
         e.redo(this)
         history.push(e)
-        hud("캔버스: ${newW} × ${newH}px")
+        hud(L.tf("캔버스: {0} × {1}px", newW, newH))
     }
 
-    fun flipCanvas(horizontal: Boolean) {
+    private fun flipCanvasImpl(horizontal: Boolean) {
         exitModes()
         val targets = pixelTargets()
         val before = targets.associateWith { it.bitmap }
@@ -1307,7 +1328,7 @@ class Editor(
             Canvas(nb).drawBitmap(l.bitmap, m, null)
             after[l] = nb
         }
-        val e = DocumentEntry(if (horizontal) "캔버스 수평 뒤집기" else "캔버스 수직 뒤집기", doc.width to doc.height, before, doc.width to doc.height, after,
+        val e = DocumentEntry(if (horizontal) L.t("캔버스 수평 뒤집기") else L.t("캔버스 수직 뒤집기"), doc.width to doc.height, before, doc.width to doc.height, after,
             beforeText, beforeText.mapValues { null })
         e.redo(this)
         history.push(e)
@@ -1320,17 +1341,17 @@ class Editor(
         val a = doc.active ?: return
         val m = Matrix().apply { if (horizontal) setScale(-1f, 1f, doc.width / 2f, 0f) else setScale(1f, -1f, 0f, doc.height / 2f) }
         val targets = if (a.isGroup) doc.pixelLayers(a) + doc.pixelLayers(a).mapNotNull { it.mask } else listOf(a)
-        if (targets.any { doc.effectiveLocked(it) }) { hud("잠긴 레이어입니다"); return }
+        if (targets.any { doc.effectiveLocked(it) }) { hud(L.t("잠긴 레이어입니다")); return }
         val parts = ArrayList<com.prosketch.app.engine.HistoryEntry>()
         for (l in targets) {
             if (l.isText) rasterizeText(l)
             val before = l.bitmap.copy(Bitmap.Config.ARGB_8888, false)
             val c = Canvas(l.bitmap)
             c.drawColor(0, BlendMode.CLEAR); c.drawBitmap(before, m, null)
-            parts.add(PixelEntry("레이어 뒤집기", l, doc.bounds(), before, l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+            parts.add(PixelEntry(L.t("레이어 뒤집기"), l, doc.bounds(), before, l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
             l.touch()
         }
-        if (parts.isNotEmpty()) history.push(if (parts.size == 1) parts[0] else CompoundEntry("레이어 뒤집기", parts))
+        if (parts.isNotEmpty()) history.push(if (parts.size == 1) parts[0] else CompoundEntry(L.t("레이어 뒤집기"), parts))
         afterCommit()
     }
 
@@ -1348,16 +1369,16 @@ class Editor(
 
     fun undo() {
         if (strokeActive) { cancelStroke(); return }
-        if (mode == Mode.TRANSFORM && transformTool.session != null) { transformTool.cancel(); hud("변형 취소"); return }
+        if (mode == Mode.TRANSFORM && transformTool.session != null) { transformTool.cancel(); hud(L.t("변형 취소")); return }
         if (mode == Mode.SELECT && selectionTool.undoPending()) return
         val l = history.undo()
-        if (l != null) hud("실행 취소: $l") else hud("실행 취소할 항목이 없습니다")
+        if (l != null) hud(L.tf("실행 취소: {0}", l)) else hud(L.t("실행 취소할 항목이 없습니다"))
         if (referenceVisible) referenceVersion++
     }
 
     fun redo() {
         val l = history.redo()
-        if (l != null) hud("다시 실행: $l") else hud("다시 실행할 항목이 없습니다")
+        if (l != null) hud(L.tf("다시 실행: {0}", l)) else hud(L.t("다시 실행할 항목이 없습니다"))
         if (referenceVisible) referenceVersion++
     }
 
@@ -1390,7 +1411,7 @@ class Editor(
         doc.layers.add(idx.coerceIn(0, doc.layers.size), l)
         doc.activeIndex = doc.layers.indexOf(l)
         doc.editMask = false
-        pushStructure("프레임 추가", before)
+        pushStructure(L.t("프레임 추가"), before)
     }
 
     private val frameThumbs = HashMap<Long, Pair<Long, Bitmap>>()
@@ -1415,7 +1436,7 @@ class Editor(
         val before = frame.holdFrames
         if (before == hold) return
         frame.holdFrames = hold.coerceIn(0, 120)
-        history.push(object : com.prosketch.app.engine.HistoryEntry("유지 시간") {
+        history.push(object : com.prosketch.app.engine.HistoryEntry(L.t("유지 시간")) {
             override val bytes = 16L
             override fun undo(h: com.prosketch.app.engine.HistoryHost) { frame.holdFrames = before; bump() }
             override fun redo(h: com.prosketch.app.engine.HistoryHost) { frame.holdFrames = hold; bump() }
@@ -1435,6 +1456,19 @@ class Editor(
     val publicHook = object : RenderHook {
         override fun isVisible(layer: Layer) = layer.visible && !layer.isPrivate
     }
+
+
+    // ---- out-of-memory guarded entry points
+    fun addLayer(layer: Layer? = null, label: String = L.t("새 레이어")): Layer? = safely(L.t("레이어 추가")) { addLayerImpl(layer, label) }
+    fun duplicateLayer(i: Int) { safely(L.t("복제")) { duplicateLayerImpl(i) } }
+    fun mergeDown(i: Int) { safely(L.t("병합")) { mergeDownImpl(i) } }
+    fun flattenGroup(g: Layer) { safely(L.t("그룹 병합")) { flattenGroupImpl(g) } }
+    fun mergeLayers(targets: List<Layer>) { safely(L.t("병합")) { mergeLayersImpl(targets) } }
+    fun addMask(target: Layer? = doc.activeLayer) { safely(L.t("마스크")) { addMaskImpl(target) } }
+    fun startNewText() { safely(L.t("텍스트 추가")) { startNewTextImpl() } }
+    fun insertImage(src: Bitmap, name: String = L.t("삽입된 이미지"), private: Boolean = false) { safely(L.t("이미지 삽입")) { insertImageImpl(src, name, private) } }
+    fun resizeCanvas(newW: Int, newH: Int, offX: Int, offY: Int, resample: Boolean) { safely(L.t("캔버스 크기 조정")) { resizeCanvasImpl(newW, newH, offX, offY, resample) } }
+    fun flipCanvas(horizontal: Boolean) { safely(L.t("캔버스 뒤집기")) { flipCanvasImpl(horizontal) } }
 
     // ------------------------------------------------------------------ persistence
     private val autosave = Runnable { save() }

@@ -1,5 +1,7 @@
 package com.prosketch.app.data
 
+import com.prosketch.app.L
+
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -28,13 +30,13 @@ enum class ExportFormat(val label: String, val ext: String, val mime: String) {
     JPEG("JPEG", "jpg", "image/jpeg"),
     TIFF("TIFF", "tif", "image/tiff"),
     PDF("PDF", "pdf", "application/pdf"),
-    LAYERS_PNG("PNG 레이어 (ZIP)", "zip", "application/zip"),
-    LAYERS_PDF("PDF 레이어 (페이지별)", "pdf", "application/pdf"),
-    GIF("움직이는 GIF", "gif", "image/gif"),
-    APNG("움직이는 PNG", "png", "image/apng"),
-    MP4("움직이는 MP4", "mp4", "video/mp4"),
-    TIMELAPSE("타임랩스 MP4", "mp4", "video/mp4"),
-    TIMELAPSE30("타임랩스 30초", "mp4", "video/mp4"),
+    LAYERS_PNG(L.t("PNG 레이어 (ZIP)"), "zip", "application/zip"),
+    LAYERS_PDF(L.t("PDF 레이어 (페이지별)"), "pdf", "application/pdf"),
+    GIF(L.t("움직이는 GIF"), "gif", "image/gif"),
+    APNG(L.t("움직이는 PNG"), "png", "image/apng"),
+    MP4(L.t("움직이는 MP4"), "mp4", "video/mp4"),
+    TIMELAPSE(L.t("타임랩스 MP4"), "mp4", "video/mp4"),
+    TIMELAPSE30(L.t("타임랩스 30초"), "mp4", "video/mp4"),
 }
 
 object Exporter {
@@ -125,7 +127,7 @@ object Exporter {
 
     /** Playback order with holds and ping-pong expanded. */
     private fun frameOrder(doc: Document): List<Layer> =
-        com.prosketch.app.engine.Anim.sequence(doc).ifEmpty { error("애니메이션 프레임이 없습니다") }
+        com.prosketch.app.engine.Anim.sequence(doc).ifEmpty { error(L.t("애니메이션 프레임이 없습니다")) }
 
     /** Animated PNG (APNG): full-frame PNGs repackaged as fcTL/fdAT chunks; keeps transparency. */
     private fun exportAnimationPng(doc: Document, f: File, progress: (Float) -> Unit) {
@@ -184,7 +186,7 @@ object Exporter {
 
     private fun exportTimelapse(store: ProjectStore, doc: Document, f: File, thirty: Boolean, progress: (Float) -> Unit) {
         val frames = (store.timelapseDir(doc.id).listFiles() ?: emptyArray()).filter { it.name.endsWith(".jpg") }.sortedBy { it.name }
-        require(frames.isNotEmpty()) { "녹화된 타임랩스가 없습니다" }
+        require(frames.isNotEmpty()) { L.t("녹화된 타임랩스가 없습니다") }
         val fps = 30
         var pick: List<File> = frames
         if (thirty && frames.size > fps * 30) {
@@ -216,7 +218,7 @@ object Exporter {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        ctx.startActivity(Intent.createChooser(send, "공유").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        ctx.startActivity(Intent.createChooser(send, L.t("공유")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     /** Saves an image or video to the device gallery (Pictures/ProSketch or Movies/ProSketch). */

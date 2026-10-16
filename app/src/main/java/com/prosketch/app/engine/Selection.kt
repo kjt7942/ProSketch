@@ -1,5 +1,7 @@
 package com.prosketch.app.engine
 
+import com.prosketch.app.L
+
 import android.graphics.Bitmap
 import android.graphics.BlendMode
 import android.graphics.Canvas
@@ -12,7 +14,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-enum class SelectionMode(val label: String) { AUTOMATIC("자동"), FREEHAND("올가미"), RECTANGLE("직사각형"), ELLIPSE("타원") }
+enum class SelectionMode(val label: String) { AUTOMATIC(L.t("자동")), FREEHAND(L.t("올가미")), RECTANGLE(L.t("직사각형")), ELLIPSE(L.t("타원")) }
 enum class SelectionOp { REPLACE, ADD, SUBTRACT }
 
 /** Selection masks are ALPHA_8 bitmaps the size of the document. */

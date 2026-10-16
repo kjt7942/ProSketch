@@ -1,5 +1,7 @@
 package com.prosketch.app.data
 
+import com.prosketch.app.L
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -51,7 +53,7 @@ object Updater {
             when (conn.responseCode) {
                 404 -> return@withContext null
                 in 200..299 -> {}
-                else -> error("GitHub 응답 오류 ${conn.responseCode}")
+                else -> error(L.tf("GitHub 응답 오류 {0}", conn.responseCode))
             }
             val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
             val assets = json.optJSONArray("assets") ?: return@withContext null
@@ -85,7 +87,7 @@ object Updater {
             try {
                 val code = conn.responseCode
                 if (code in 300..399) { url = URL(url, conn.getHeaderField("Location")); return@repeat }
-                if (code !in 200..299) error("다운로드 실패 ($code)")
+                if (code !in 200..299) error(L.tf("다운로드 실패 ({0})", code))
                 val total = conn.contentLengthLong.takeIf { it > 0 } ?: rel.apkSize
                 conn.inputStream.use { input ->
                     out.outputStream().use { output ->
@@ -98,11 +100,11 @@ object Updater {
                         }
                     }
                 }
-                if (rel.apkSize > 0 && out.length() != rel.apkSize) error("다운로드가 완전하지 않습니다")
+                if (rel.apkSize > 0 && out.length() != rel.apkSize) error(L.t("다운로드가 완전하지 않습니다"))
                 return@withContext out
             } finally { conn.disconnect() }
         }
-        error("리디렉션이 너무 많습니다")
+        error(L.t("리디렉션이 너무 많습니다"))
     }
 
     /** True when the user still has to allow "install unknown apps" for ProSketch. */

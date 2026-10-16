@@ -1,5 +1,7 @@
 package com.prosketch.app.engine
 
+import com.prosketch.app.L
+
 import android.graphics.Bitmap
 import android.graphics.BlendMode
 import android.graphics.Canvas
@@ -13,32 +15,32 @@ import java.util.concurrent.atomic.AtomicLong
  * others ([mode] == null) are composited exactly on the CPU by [SoftBlend].
  */
 enum class LayerBlend(val label: String, val short: String, val mode: BlendMode?, val psdKey: String, val group: Int) {
-    NORMAL("보통", "N", BlendMode.SRC_OVER, "norm", 0),
-    MULTIPLY("곱하기", "M", BlendMode.MULTIPLY, "mul ", 1),
-    DARKEN("어둡게", "D", BlendMode.DARKEN, "dark", 1),
-    COLOR_BURN("색상 번", "Cb", BlendMode.COLOR_BURN, "idiv", 1),
-    LINEAR_BURN("선형 번", "Lb", null, "lbrn", 1),
-    DARKER_COLOR("더 어두운 색상", "Dc", null, "dkCl", 1),
-    LIGHTEN("밝게", "L", BlendMode.LIGHTEN, "lite", 2),
-    SCREEN("스크린", "S", BlendMode.SCREEN, "scrn", 2),
-    COLOR_DODGE("색상 닷지", "Cd", BlendMode.COLOR_DODGE, "div ", 2),
-    ADD("추가", "A", BlendMode.PLUS, "lddg", 2),
-    LIGHTER_COLOR("더 밝은 색상", "Lc", null, "lgCl", 2),
-    OVERLAY("오버레이", "O", BlendMode.OVERLAY, "over", 3),
-    SOFT_LIGHT("소프트 라이트", "Sl", BlendMode.SOFT_LIGHT, "sLit", 3),
-    HARD_LIGHT("하드 라이트", "Hl", BlendMode.HARD_LIGHT, "hLit", 3),
-    VIVID_LIGHT("선명한 라이트", "Vl", null, "vLit", 3),
-    LINEAR_LIGHT("선형 라이트", "Ll", null, "lLit", 3),
-    PIN_LIGHT("핀 라이트", "Pl", null, "pLit", 3),
-    HARD_MIX("하드 혼합", "Hm", null, "hMix", 3),
-    DIFFERENCE("차이", "Di", BlendMode.DIFFERENCE, "diff", 4),
-    EXCLUSION("제외", "E", BlendMode.EXCLUSION, "smud", 4),
-    SUBTRACT("빼기", "Su", null, "fsub", 4),
-    DIVIDE("나누기", "Dv", null, "fdiv", 4),
-    HUE("색조", "H", BlendMode.HUE, "hue ", 5),
-    SATURATION("채도", "Sa", BlendMode.SATURATION, "sat ", 5),
-    COLOR("색상", "C", BlendMode.COLOR, "colr", 5),
-    LUMINOSITY("광도", "Lu", BlendMode.LUMINOSITY, "lum ", 5);
+    NORMAL(L.t("보통"), "N", BlendMode.SRC_OVER, "norm", 0),
+    MULTIPLY(L.t("곱하기"), "M", BlendMode.MULTIPLY, "mul ", 1),
+    DARKEN(L.t("어둡게"), "D", BlendMode.DARKEN, "dark", 1),
+    COLOR_BURN(L.t("색상 번"), "Cb", BlendMode.COLOR_BURN, "idiv", 1),
+    LINEAR_BURN(L.t("선형 번"), "Lb", null, "lbrn", 1),
+    DARKER_COLOR(L.t("더 어두운 색상"), "Dc", null, "dkCl", 1),
+    LIGHTEN(L.t("밝게"), "L", BlendMode.LIGHTEN, "lite", 2),
+    SCREEN(L.t("스크린"), "S", BlendMode.SCREEN, "scrn", 2),
+    COLOR_DODGE(L.t("색상 닷지"), "Cd", BlendMode.COLOR_DODGE, "div ", 2),
+    ADD(L.t("추가"), "A", BlendMode.PLUS, "lddg", 2),
+    LIGHTER_COLOR(L.t("더 밝은 색상"), "Lc", null, "lgCl", 2),
+    OVERLAY(L.t("오버레이"), "O", BlendMode.OVERLAY, "over", 3),
+    SOFT_LIGHT(L.t("소프트 라이트"), "Sl", BlendMode.SOFT_LIGHT, "sLit", 3),
+    HARD_LIGHT(L.t("하드 라이트"), "Hl", BlendMode.HARD_LIGHT, "hLit", 3),
+    VIVID_LIGHT(L.t("선명한 라이트"), "Vl", null, "vLit", 3),
+    LINEAR_LIGHT(L.t("선형 라이트"), "Ll", null, "lLit", 3),
+    PIN_LIGHT(L.t("핀 라이트"), "Pl", null, "pLit", 3),
+    HARD_MIX(L.t("하드 혼합"), "Hm", null, "hMix", 3),
+    DIFFERENCE(L.t("차이"), "Di", BlendMode.DIFFERENCE, "diff", 4),
+    EXCLUSION(L.t("제외"), "E", BlendMode.EXCLUSION, "smud", 4),
+    SUBTRACT(L.t("빼기"), "Su", null, "fsub", 4),
+    DIVIDE(L.t("나누기"), "Dv", null, "fdiv", 4),
+    HUE(L.t("색조"), "H", BlendMode.HUE, "hue ", 5),
+    SATURATION(L.t("채도"), "Sa", BlendMode.SATURATION, "sat ", 5),
+    COLOR(L.t("색상"), "C", BlendMode.COLOR, "colr", 5),
+    LUMINOSITY(L.t("광도"), "Lu", BlendMode.LUMINOSITY, "lum ", 5);
 
     val isCustom get() = mode == null
     /** Mode used where only native modes are possible (e.g. while recording a GPU display list). */
@@ -137,7 +139,7 @@ class Layer(
 
         /** A mask that reveals everything. */
         fun whiteMask(w: Int, h: Int): Layer =
-            Layer(Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.WHITE) }, "마스크")
+            Layer(Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.WHITE) }, L.t("마스크"))
     }
 }
 
@@ -160,7 +162,7 @@ class Document(
     var width: Int,
     var height: Int,
 ) {
-    var name: String = "무제 작품"
+    var name: String = L.t("무제 작품")
     val layers = mutableListOf<Layer>()   // bottom → top; descendants directly below their group
     var activeIndex = 0
     /** The active layer's mask is edited instead of its pixels. */

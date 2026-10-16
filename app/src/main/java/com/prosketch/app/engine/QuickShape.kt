@@ -1,5 +1,7 @@
 package com.prosketch.app.engine
 
+import com.prosketch.app.L
+
 import android.graphics.PointF
 import kotlin.math.PI
 import kotlin.math.abs
@@ -22,7 +24,7 @@ sealed class QShape {
     abstract fun perfect(): QShape
 
     data class Line(val a: PointF, val b: PointF) : QShape() {
-        override val label = "직선"
+        override val label = L.t("직선")
         override fun path() = listOf(a, b)
         override fun center() = PointF((a.x + b.x) / 2, (a.y + b.y) / 2)
         override fun mapped(f: (PointF) -> PointF) = Line(f(a), f(b))
@@ -36,7 +38,7 @@ sealed class QShape {
     }
 
     data class Ellipse(val cx: Float, val cy: Float, val rx: Float, val ry: Float, val rot: Float) : QShape() {
-        override val label = if (abs(rx - ry) < 0.02f * max(rx, ry)) "원" else "타원"
+        override val label = if (abs(rx - ry) < 0.02f * max(rx, ry)) L.t("원") else L.t("타원")
         override fun path(): List<PointF> {
             val n = (max(rx, ry) * 0.35f).toInt().coerceIn(48, 400)
             val c = cos(rot); val s = sin(rot)
@@ -60,10 +62,10 @@ sealed class QShape {
 
     data class Polygon(val pts: List<PointF>, val closed: Boolean) : QShape() {
         override val label = when {
-            !closed -> "폴리라인"
-            pts.size == 3 -> "삼각형"
-            pts.size == 4 -> "사각형"
-            else -> "다각형"
+            !closed -> L.t("폴리라인")
+            pts.size == 3 -> L.t("삼각형")
+            pts.size == 4 -> L.t("사각형")
+            else -> L.t("다각형")
         }
         override fun path() = if (closed) pts + pts.first() else pts
         override fun center(): PointF {
@@ -102,7 +104,7 @@ sealed class QShape {
     }
 
     data class Arc(val cx: Float, val cy: Float, val r: Float, val start: Float, val sweep: Float) : QShape() {
-        override val label = "호"
+        override val label = L.t("호")
         override fun path(): List<PointF> {
             val n = (r * abs(sweep) * 0.3f).toInt().coerceIn(16, 300)
             return (0..n).map { i ->

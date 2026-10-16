@@ -1,5 +1,7 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.L
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -101,7 +103,7 @@ private fun Modifier.dragPositions(onPos: (Offset, Boolean, Size) -> Unit, onEnd
 @Composable
 fun ColorPanel(ed: Editor, modifier: Modifier = Modifier) {
     var tab by remember { mutableIntStateOf(ed.prefs.lastColorTab) }
-    PanelBox(modifier, title = "색상", trailing = {
+    PanelBox(modifier, title = L.t("색상"), trailing = {
         // primary / previous swatches (tap previous to swap)
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Box(Modifier.size(34.dp, 24.dp).clip(RoundedCornerShape(6.dp)).background(Color(ed.color)).border(1.dp, Color(0x55FFFFFF), RoundedCornerShape(6.dp)))
@@ -121,7 +123,7 @@ fun ColorPanel(ed: Editor, modifier: Modifier = Modifier) {
         if (tab != 4) {
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("최근", color = UI.text2, fontSize = 11.sp, modifier = Modifier.width(34.dp))
+                Text(L.t("최근"), color = UI.text2, fontSize = 11.sp, modifier = Modifier.width(34.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     ed.recentColors.take(10).forEach { c -> ColorDot(Color(c), 24.dp) { ed.setColor(c) } }
                 }
@@ -135,7 +137,7 @@ fun ColorPanel(ed: Editor, modifier: Modifier = Modifier) {
             }
         }
         Spacer(Modifier.height(10.dp))
-        Segmented(listOf("디스크", "클래식", "하모니", "값", "팔레트"), tab, Modifier.fillMaxWidth()) { tab = it; ed.prefs.lastColorTab = it }
+        Segmented(listOf(L.t("디스크"), L.t("클래식"), L.t("하모니"), L.t("값"), L.t("팔레트")), tab, Modifier.fillMaxWidth()) { tab = it; ed.prefs.lastColorTab = it }
     }
 }
 
@@ -229,7 +231,7 @@ private fun ClassicPicker(ed: Editor) {
     }
 }
 
-private val harmonyModes = listOf("보색", "분할 보색", "유사색", "삼원색", "사원색")
+private val harmonyModes = listOf(L.t("보색"), L.t("분할 보색"), L.t("유사색"), L.t("삼원색"), L.t("사원색"))
 private fun harmonyOffsets(m: Int) = when (m) {
     0 -> listOf(0f, 180f); 1 -> listOf(0f, 150f, 210f); 2 -> listOf(0f, -30f, 30f); 3 -> listOf(0f, 120f, 240f); else -> listOf(0f, 90f, 180f, 270f)
 }
@@ -302,7 +304,7 @@ private fun ValuePicker(ed: Editor) {
         Spacer(Modifier.height(8.dp))
         var hex by remember(ed.color) { mutableStateOf(String.format("%06X", ed.color and 0xFFFFFF)) }
         OutlinedTextField(
-            value = hex, singleLine = true, label = { Text("16진수") },
+            value = hex, singleLine = true, label = { Text(L.t("16진수")) },
             onValueChange = { v ->
                 hex = v.uppercase().filter { it.isDigit() || it in 'A'..'F' }.take(6)
                 if (hex.length == 6) ed.setColor((0xFF000000 or hex.toLong(16)).toInt())
@@ -321,9 +323,9 @@ private fun PalettesView(ed: Editor) {
     Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
         refresh.let { }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("팔레트", color = UI.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
-            TextBtn("+ 새 팔레트") {
-                store.palettes.add(0, Palette("p_" + System.currentTimeMillis(), "무제 팔레트", mutableListOf()))
+            Text(L.t("팔레트"), color = UI.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
+            TextBtn(L.t("+ 새 팔레트")) {
+                store.palettes.add(0, Palette("p_" + System.currentTimeMillis(), L.t("무제 팔레트"), mutableListOf()))
                 store.activeId = store.palettes[0].id
                 store.save(); refresh++
             }
@@ -334,7 +336,7 @@ private fun PalettesView(ed: Editor) {
                 val active = p.id == store.activeId
                 Text((if (active) "✓ " else "") + p.name, color = if (active) UI.accent else UI.text, fontSize = 13.sp, modifier = Modifier.weight(1f)
                     .combinedClickable(onClick = { store.activeId = p.id; store.save(); refresh++ }))
-                if (store.palettes.size > 1) Icon(Icons.Filled.Delete, "삭제", tint = UI.text2, modifier = Modifier.size(18.dp)
+                if (store.palettes.size > 1) Icon(Icons.Filled.Delete, L.t("삭제"), tint = UI.text2, modifier = Modifier.size(18.dp)
                     .combinedClickable(onClick = {}, onLongClick = { store.palettes.remove(p); if (store.activeId == p.id) store.activeId = store.palettes[0].id; store.save(); refresh++ }))
             }
             Spacer(Modifier.height(4.dp))
@@ -342,16 +344,16 @@ private fun PalettesView(ed: Editor) {
                 p.colors.toList().forEachIndexed { i, c ->
                     Box(Modifier.size(28.dp).clip(RoundedCornerShape(5.dp)).background(Color(c))
                         .combinedClickable(onClick = { ed.setColor(c); store.activeId = p.id; store.save(); refresh++ },
-                            onLongClick = { p.colors.removeAt(i); store.save(); refresh++; ed.hud("견본 삭제") }))
+                            onLongClick = { p.colors.removeAt(i); store.save(); refresh++; ed.hud(L.t("견본 삭제")) }))
                 }
                 if (p.colors.size < 30) Box(Modifier.size(28.dp).clip(RoundedCornerShape(5.dp)).border(1.dp, UI.text2, RoundedCornerShape(5.dp))
                     .combinedClickable(onClick = { p.colors.add(ed.color); store.save(); refresh++ }), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Add, "현재 색상 추가", tint = UI.text2, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.Add, L.t("현재 색상 추가"), tint = UI.text2, modifier = Modifier.size(16.dp))
                 }
             }
         }
         Spacer(Modifier.height(6.dp))
-        Text("견본을 길게 눌러 삭제 · + 를 눌러 현재 색상 저장", color = UI.text2, fontSize = 11.sp)
+        Text(L.t("견본을 길게 눌러 삭제 · + 를 눌러 현재 색상 저장"), color = UI.text2, fontSize = 11.sp)
     }
 }
 

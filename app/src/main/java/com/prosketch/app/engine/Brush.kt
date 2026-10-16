@@ -1,15 +1,17 @@
 package com.prosketch.app.engine
 
+import com.prosketch.app.L
+
 import org.json.JSONObject
 
 enum class TipShape(val label: String) {
-    ROUND("원형"), PENCIL("연필"), CHARCOAL("목탄"), BRISTLE("강모"), FLAT("평붓"),
-    SPLATTER("스플래터"), SQUARE("사각"), SPRAY("스프레이"), LEAF("잎"), STAR("별"), CUSTOM("사용자 지정")
+    ROUND(L.t("원형")), PENCIL(L.t("연필")), CHARCOAL(L.t("목탄")), BRISTLE(L.t("강모")), FLAT(L.t("평붓")),
+    SPLATTER(L.t("스플래터")), SQUARE(L.t("사각")), SPRAY(L.t("스프레이")), LEAF(L.t("잎")), STAR(L.t("별")), CUSTOM(L.t("사용자 지정"))
 }
 
 enum class GrainType(val label: String) {
-    NONE("없음"), PAPER("종이"), CANVAS("캔버스"), PENCIL("연필 결"), SPONGE("스펀지"),
-    NOISE("노이즈"), WATERCOLOR("수채"), CHALK("분필"), CUSTOM("사용자 지정")
+    NONE(L.t("없음")), PAPER(L.t("종이")), CANVAS(L.t("캔버스")), PENCIL(L.t("연필 결")), SPONGE(L.t("스펀지")),
+    NOISE(L.t("노이즈")), WATERCOLOR(L.t("수채")), CHALK(L.t("분필")), CUSTOM(L.t("사용자 지정"))
 }
 
 /**
@@ -145,7 +147,7 @@ data class Brush(
     companion object {
         fun fromJson(o: JSONObject): Brush {
             fun f(k: String, d: Float) = o.optDouble(k, d.toDouble()).toFloat()
-            val b = Brush(o.getString("id"), o.optString("name", "브러시"), o.optString("category", "나의 브러시"))
+            val b = Brush(o.getString("id"), o.optString("name", L.t("브러시")), o.optString("category", L.t("나의 브러시")))
             return b.apply {
                 spacing = f("spacing", spacing); spacingJitter = f("spacingJitter", spacingJitter)
                 jitterLateral = f("jitterLateral", jitterLateral); jitterLinear = f("jitterLinear", jitterLinear)
@@ -200,104 +202,104 @@ object DefaultBrushes {
 
     fun all(): List<Brush> = listOf(
         // ---- Sketching
-        Brush("b_6b", "6B 연필", SKETCH, true, spacing = 0.06f, streamline = 0.1f, tip = TipShape.PENCIL, tipHardness = 0.6f,
+        Brush("b_6b", L.t("6B 연필"), SKETCH, true, spacing = 0.06f, streamline = 0.1f, tip = TipShape.PENCIL, tipHardness = 0.6f,
             grain = GrainType.PENCIL, grainScale = 0.8f, grainDepth = 0.9f, flow = 0.75f, pressureSize = 0.35f, pressureOpacity = 0.85f,
             tiltSize = 0.8f, tiltOpacity = 0.45f, sizeMin = 2f, sizeMax = 40f, defaultSize = 0.4f, taperStart = 0.1f, taperEnd = 0.1f, taperSize = 0.4f),
-        Brush("b_hb", "HB 연필", SKETCH, true, spacing = 0.05f, streamline = 0.15f, tip = TipShape.PENCIL, tipHardness = 0.8f,
+        Brush("b_hb", L.t("HB 연필"), SKETCH, true, spacing = 0.05f, streamline = 0.15f, tip = TipShape.PENCIL, tipHardness = 0.8f,
             grain = GrainType.PENCIL, grainScale = 0.6f, grainDepth = 0.7f, flow = 0.6f, pressureSize = 0.25f, pressureOpacity = 0.9f,
             tiltSize = 0.6f, tiltOpacity = 0.3f, sizeMin = 1f, sizeMax = 18f, defaultSize = 0.4f, taperStart = 0.1f, taperEnd = 0.1f, taperSize = 0.5f),
-        Brush("b_narinder", "나린더 연필", SKETCH, true, spacing = 0.04f, streamline = 0.2f, tip = TipShape.PENCIL, tipHardness = 0.9f,
+        Brush("b_narinder", L.t("나린더 연필"), SKETCH, true, spacing = 0.04f, streamline = 0.2f, tip = TipShape.PENCIL, tipHardness = 0.9f,
             grain = GrainType.PAPER, grainScale = 0.6f, grainDepth = 0.55f, flow = 0.85f, pressureSize = 0.5f, pressureOpacity = 0.6f,
             sizeMin = 1f, sizeMax = 14f, defaultSize = 0.45f, taperStart = 0.15f, taperEnd = 0.2f, taperSize = 0.2f),
-        Brush("b_peppermint", "페퍼민트", SKETCH, true, spacing = 0.03f, streamline = 0.35f, tip = TipShape.ROUND, tipHardness = 0.85f,
+        Brush("b_peppermint", L.t("페퍼민트"), SKETCH, true, spacing = 0.03f, streamline = 0.35f, tip = TipShape.ROUND, tipHardness = 0.85f,
             grain = GrainType.PAPER, grainScale = 0.5f, grainDepth = 0.35f, flow = 0.9f, pressureSize = 0.6f, pressureOpacity = 0.5f,
             sizeMin = 1f, sizeMax = 12f, defaultSize = 0.4f, taperStart = 0.2f, taperEnd = 0.25f, taperSize = 0.05f),
-        Brush("b_charcoal", "목탄", SKETCH, true, spacing = 0.1f, streamline = 0.05f, tip = TipShape.CHARCOAL, tipHardness = 0.5f,
+        Brush("b_charcoal", L.t("목탄"), SKETCH, true, spacing = 0.1f, streamline = 0.05f, tip = TipShape.CHARCOAL, tipHardness = 0.5f,
             scatter = 1f, randomized = true, grain = GrainType.CHALK, grainScale = 1.2f, grainDepth = 1f, flow = 0.7f,
             pressureSize = 0.4f, pressureOpacity = 0.7f, tiltSize = 1f, tiltOpacity = 0.4f, sizeMin = 4f, sizeMax = 90f, defaultSize = 0.4f),
 
         // ---- Inking
-        Brush("b_studio", "스튜디오 펜", INK, true, spacing = 0.02f, streamline = 0.45f, tip = TipShape.ROUND, tipHardness = 1f,
+        Brush("b_studio", L.t("스튜디오 펜"), INK, true, spacing = 0.02f, streamline = 0.45f, tip = TipShape.ROUND, tipHardness = 1f,
             flow = 1f, pressureSize = 0.85f, pressureOpacity = 0f, sizeMin = 1f, sizeMax = 40f, defaultSize = 0.35f,
             taperStart = 0.25f, taperEnd = 0.35f, taperSize = 0.02f, speedSize = -0.15f),
-        Brush("b_tech", "기술용 펜", INK, true, spacing = 0.02f, streamline = 0.5f, tip = TipShape.ROUND, tipHardness = 1f,
+        Brush("b_tech", L.t("기술용 펜"), INK, true, spacing = 0.02f, streamline = 0.5f, tip = TipShape.ROUND, tipHardness = 1f,
             flow = 1f, pressureSize = 0f, pressureOpacity = 0f, sizeMin = 1f, sizeMax = 30f, defaultSize = 0.25f),
-        Brush("b_gel", "젤 펜", INK, true, spacing = 0.02f, streamline = 0.3f, tip = TipShape.ROUND, tipHardness = 0.95f,
+        Brush("b_gel", L.t("젤 펜"), INK, true, spacing = 0.02f, streamline = 0.3f, tip = TipShape.ROUND, tipHardness = 0.95f,
             flow = 1f, pressureSize = 0.45f, sizeMin = 1f, sizeMax = 25f, defaultSize = 0.3f, taperStart = 0.1f, taperEnd = 0.15f, taperSize = 0.3f),
-        Brush("b_dryink", "드라이 잉크", INK, true, spacing = 0.04f, streamline = 0.25f, tip = TipShape.CHARCOAL, tipHardness = 0.9f,
+        Brush("b_dryink", L.t("드라이 잉크"), INK, true, spacing = 0.04f, streamline = 0.25f, tip = TipShape.CHARCOAL, tipHardness = 0.9f,
             grain = GrainType.PAPER, grainScale = 0.7f, grainDepth = 0.8f, grainContrast = 0.6f, flow = 1f, pressureSize = 0.7f,
             pressureOpacity = 0.1f, sizeMin = 2f, sizeMax = 45f, defaultSize = 0.35f, taperStart = 0.15f, taperEnd = 0.2f, taperSize = 0.1f),
-        Brush("b_marker", "마커", INK, true, spacing = 0.03f, streamline = 0.2f, tip = TipShape.FLAT, roundness = 0.55f, tipAngle = 35f,
+        Brush("b_marker", L.t("마커"), INK, true, spacing = 0.03f, streamline = 0.2f, tip = TipShape.FLAT, roundness = 0.55f, tipAngle = 35f,
             tipHardness = 0.9f, flow = 0.55f, pressureSize = 0.15f, pressureOpacity = 0.2f, sizeMin = 4f, sizeMax = 70f,
             defaultSize = 0.4f, defaultOpacity = 0.85f),
 
         // ---- Painting
-        Brush("b_round", "둥근 붓", PAINT, true, spacing = 0.05f, streamline = 0.15f, tip = TipShape.BRISTLE, tipHardness = 0.8f,
+        Brush("b_round", L.t("둥근 붓"), PAINT, true, spacing = 0.05f, streamline = 0.15f, tip = TipShape.BRISTLE, tipHardness = 0.8f,
             grain = GrainType.CANVAS, grainScale = 1f, grainDepth = 0.3f, flow = 0.85f, pressureSize = 0.75f, pressureOpacity = 0.35f,
             dilution = 0.05f, pull = 0.15f, charge = 0.85f, sizeMin = 3f, sizeMax = 120f, defaultSize = 0.4f,
             taperStart = 0.1f, taperEnd = 0.2f, taperSize = 0.2f, rotation = 1f),
-        Brush("b_flat", "평붓", PAINT, true, spacing = 0.04f, streamline = 0.1f, tip = TipShape.FLAT, roundness = 0.3f, tipHardness = 0.75f,
+        Brush("b_flat", L.t("평붓"), PAINT, true, spacing = 0.04f, streamline = 0.1f, tip = TipShape.FLAT, roundness = 0.3f, tipHardness = 0.75f,
             grain = GrainType.CANVAS, grainDepth = 0.35f, flow = 0.9f, pressureSize = 0.5f, pressureOpacity = 0.4f, pull = 0.25f,
             charge = 0.8f, sizeMin = 5f, sizeMax = 150f, defaultSize = 0.4f, rotation = 1f),
-        Brush("b_gouache", "과슈", PAINT, true, spacing = 0.05f, streamline = 0.1f, tip = TipShape.CHARCOAL, tipHardness = 0.85f,
+        Brush("b_gouache", L.t("과슈"), PAINT, true, spacing = 0.05f, streamline = 0.1f, tip = TipShape.CHARCOAL, tipHardness = 0.85f,
             grain = GrainType.PAPER, grainScale = 1.1f, grainDepth = 0.55f, flow = 0.9f, pressureSize = 0.4f, pressureOpacity = 0.6f,
             pull = 0.1f, sizeMin = 4f, sizeMax = 140f, defaultSize = 0.45f, rotation = 0.6f),
-        Brush("b_oil", "유화", PAINT, true, spacing = 0.04f, streamline = 0.1f, tip = TipShape.BRISTLE, tipHardness = 0.85f,
+        Brush("b_oil", L.t("유화"), PAINT, true, spacing = 0.04f, streamline = 0.1f, tip = TipShape.BRISTLE, tipHardness = 0.85f,
             grain = GrainType.CANVAS, grainScale = 1.2f, grainDepth = 0.45f, flow = 1f, glaze = false, pressureSize = 0.6f,
             pressureOpacity = 0.3f, pull = 0.55f, charge = 0.6f, dilution = 0f, sizeMin = 5f, sizeMax = 160f, defaultSize = 0.45f, rotation = 1f),
-        Brush("b_water", "수채", PAINT, true, spacing = 0.04f, streamline = 0.2f, tip = TipShape.ROUND, tipHardness = 0.25f,
+        Brush("b_water", L.t("수채"), PAINT, true, spacing = 0.04f, streamline = 0.2f, tip = TipShape.ROUND, tipHardness = 0.25f,
             grain = GrainType.WATERCOLOR, grainScale = 1.4f, grainDepth = 0.6f, flow = 0.35f, wetEdges = 0.5f,
             pressureSize = 0.45f, pressureOpacity = 0.6f, dilution = 0.35f, pull = 0.25f, sizeMin = 8f, sizeMax = 220f,
             defaultSize = 0.45f, defaultOpacity = 0.7f, stampBri = 0.03f),
-        Brush("b_wetacrylic", "습식 아크릴", PAINT, true, spacing = 0.035f, streamline = 0.15f, tip = TipShape.ROUND, tipHardness = 0.7f,
+        Brush("b_wetacrylic", L.t("습식 아크릴"), PAINT, true, spacing = 0.035f, streamline = 0.15f, tip = TipShape.ROUND, tipHardness = 0.7f,
             grain = GrainType.CANVAS, grainDepth = 0.25f, flow = 1f, glaze = false, pull = 0.7f, charge = 0.45f, pressureSize = 0.5f,
             pressureOpacity = 0.4f, sizeMin = 6f, sizeMax = 180f, defaultSize = 0.4f),
 
         // ---- Airbrushing
-        Brush("b_soft_air", "소프트 에어브러시", AIR, true, spacing = 0.05f, streamline = 0.1f, tip = TipShape.ROUND, tipHardness = 0f,
+        Brush("b_soft_air", L.t("소프트 에어브러시"), AIR, true, spacing = 0.05f, streamline = 0.1f, tip = TipShape.ROUND, tipHardness = 0f,
             flow = 0.18f, pressureSize = 0.2f, pressureOpacity = 0.8f, sizeMin = 10f, sizeMax = 600f, defaultSize = 0.5f, defaultOpacity = 0.9f),
-        Brush("b_med_air", "중간 에어브러시", AIR, true, spacing = 0.04f, streamline = 0.1f, tip = TipShape.ROUND, tipHardness = 0.45f,
+        Brush("b_med_air", L.t("중간 에어브러시"), AIR, true, spacing = 0.04f, streamline = 0.1f, tip = TipShape.ROUND, tipHardness = 0.45f,
             flow = 0.3f, pressureSize = 0.3f, pressureOpacity = 0.7f, sizeMin = 6f, sizeMax = 400f, defaultSize = 0.45f),
-        Brush("b_hard_air", "하드 에어브러시", AIR, true, spacing = 0.03f, streamline = 0.15f, tip = TipShape.ROUND, tipHardness = 0.9f,
+        Brush("b_hard_air", L.t("하드 에어브러시"), AIR, true, spacing = 0.03f, streamline = 0.15f, tip = TipShape.ROUND, tipHardness = 0.9f,
             flow = 0.85f, pressureSize = 0.3f, pressureOpacity = 0.5f, sizeMin = 4f, sizeMax = 400f, defaultSize = 0.4f),
-        Brush("b_spray", "스프레이 페인트", AIR, true, spacing = 0.05f, streamline = 0f, tip = TipShape.SPRAY, tipHardness = 0.5f,
+        Brush("b_spray", L.t("스프레이 페인트"), AIR, true, spacing = 0.05f, streamline = 0f, tip = TipShape.SPRAY, tipHardness = 0.5f,
             scatter = 1f, randomized = true, flow = 0.5f, pressureSize = 0.4f, pressureOpacity = 0.7f, sizeMin = 10f, sizeMax = 400f, defaultSize = 0.45f),
 
         // ---- Calligraphy
-        Brush("b_chisel", "끌 펜", CALLI, true, spacing = 0.015f, streamline = 0.35f, tip = TipShape.FLAT, roundness = 0.12f, tipAngle = 45f,
+        Brush("b_chisel", L.t("끌 펜"), CALLI, true, spacing = 0.015f, streamline = 0.35f, tip = TipShape.FLAT, roundness = 0.12f, tipAngle = 45f,
             tipHardness = 1f, flow = 1f, pressureSize = 0.25f, sizeMin = 4f, sizeMax = 80f, defaultSize = 0.35f),
-        Brush("b_brushpen", "브러시 펜", CALLI, true, spacing = 0.015f, streamline = 0.5f, tip = TipShape.ROUND, tipHardness = 1f,
+        Brush("b_brushpen", L.t("브러시 펜"), CALLI, true, spacing = 0.015f, streamline = 0.5f, tip = TipShape.ROUND, tipHardness = 1f,
             flow = 1f, pressureSize = 1f, sizeMin = 1f, sizeMax = 50f, defaultSize = 0.4f, taperStart = 0.3f, taperEnd = 0.4f, taperSize = 0.01f),
-        Brush("b_monoline", "모노라인", CALLI, true, spacing = 0.015f, streamline = 0.65f, tip = TipShape.ROUND, tipHardness = 1f,
+        Brush("b_monoline", L.t("모노라인"), CALLI, true, spacing = 0.015f, streamline = 0.65f, tip = TipShape.ROUND, tipHardness = 1f,
             flow = 1f, pressureSize = 0f, pressureOpacity = 0f, sizeMin = 2f, sizeMax = 60f, defaultSize = 0.3f),
-        Brush("b_script", "스크립트", CALLI, true, spacing = 0.015f, streamline = 0.55f, tip = TipShape.FLAT, roundness = 0.35f, tipAngle = 30f,
+        Brush("b_script", L.t("스크립트"), CALLI, true, spacing = 0.015f, streamline = 0.55f, tip = TipShape.FLAT, roundness = 0.35f, tipAngle = 30f,
             tipHardness = 1f, flow = 1f, pressureSize = 0.8f, sizeMin = 2f, sizeMax = 60f, defaultSize = 0.35f, taperStart = 0.2f, taperEnd = 0.3f),
 
         // ---- Textures
-        Brush("b_noise", "노이즈 브러시", TEXTURE, true, spacing = 0.12f, streamline = 0f, tip = TipShape.ROUND, tipHardness = 0.3f,
+        Brush("b_noise", L.t("노이즈 브러시"), TEXTURE, true, spacing = 0.12f, streamline = 0f, tip = TipShape.ROUND, tipHardness = 0.3f,
             grain = GrainType.NOISE, grainScale = 1f, grainDepth = 1f, grainContrast = 0.5f, flow = 0.5f, pressureOpacity = 0.6f,
             sizeMin = 20f, sizeMax = 600f, defaultSize = 0.5f),
-        Brush("b_sponge", "스펀지", TEXTURE, true, spacing = 0.15f, streamline = 0f, tip = TipShape.CHARCOAL, tipHardness = 0.6f,
+        Brush("b_sponge", L.t("스펀지"), TEXTURE, true, spacing = 0.15f, streamline = 0f, tip = TipShape.CHARCOAL, tipHardness = 0.6f,
             scatter = 1f, randomized = true, grain = GrainType.SPONGE, grainScale = 1f, grainDepth = 1f, flow = 0.6f,
             pressureOpacity = 0.6f, sizeMin = 20f, sizeMax = 400f, defaultSize = 0.45f),
-        Brush("b_canvas", "캔버스 질감", TEXTURE, true, spacing = 0.1f, streamline = 0f, tip = TipShape.ROUND, tipHardness = 0.2f,
+        Brush("b_canvas", L.t("캔버스 질감"), TEXTURE, true, spacing = 0.1f, streamline = 0f, tip = TipShape.ROUND, tipHardness = 0.2f,
             grain = GrainType.CANVAS, grainScale = 1.5f, grainDepth = 1f, grainContrast = 0.4f, flow = 0.4f, pressureOpacity = 0.6f,
             sizeMin = 30f, sizeMax = 800f, defaultSize = 0.5f),
-        Brush("b_splatter", "스플래터", TEXTURE, true, spacing = 0.6f, spacingJitter = 0.6f, streamline = 0f, tip = TipShape.SPLATTER,
+        Brush("b_splatter", L.t("스플래터"), TEXTURE, true, spacing = 0.6f, spacingJitter = 0.6f, streamline = 0f, tip = TipShape.SPLATTER,
             scatter = 1f, randomized = true, jitterSize = 0.5f, jitterLateral = 0.4f, flow = 1f, pressureSize = 0.4f, pressureOpacity = 0f,
             sizeMin = 20f, sizeMax = 500f, defaultSize = 0.4f),
 
         // ---- Artistic
-        Brush("b_leaves", "나뭇잎", ARTISTIC, true, spacing = 0.45f, spacingJitter = 0.5f, streamline = 0f, tip = TipShape.LEAF,
+        Brush("b_leaves", L.t("나뭇잎"), ARTISTIC, true, spacing = 0.45f, spacingJitter = 0.5f, streamline = 0f, tip = TipShape.LEAF,
             rotation = 1f, scatter = 0.3f, jitterSize = 0.4f, jitterLateral = 0.6f, stampHue = 0.05f, stampBri = 0.15f,
             flow = 1f, pressureSize = 0.5f, sizeMin = 10f, sizeMax = 200f, defaultSize = 0.4f),
-        Brush("b_stars", "반짝이", ARTISTIC, true, spacing = 1.2f, spacingJitter = 1f, streamline = 0f, tip = TipShape.STAR,
+        Brush("b_stars", L.t("반짝이"), ARTISTIC, true, spacing = 1.2f, spacingJitter = 1f, streamline = 0f, tip = TipShape.STAR,
             scatter = 1f, jitterSize = 0.8f, jitterLateral = 1.5f, jitterOpacity = 0.5f, strokeBlend = LayerBlend.ADD,
             flow = 1f, pressureSize = 0.3f, sizeMin = 6f, sizeMax = 120f, defaultSize = 0.35f),
-        Brush("b_glow", "네온 글로우", ARTISTIC, true, spacing = 0.03f, streamline = 0.4f, tip = TipShape.ROUND, tipHardness = 0.15f,
+        Brush("b_glow", L.t("네온 글로우"), ARTISTIC, true, spacing = 0.03f, streamline = 0.4f, tip = TipShape.ROUND, tipHardness = 0.15f,
             strokeBlend = LayerBlend.ADD, flow = 0.4f, pressureSize = 0.5f, pressureOpacity = 0.3f, sizeMin = 4f, sizeMax = 200f,
             defaultSize = 0.35f),
-        Brush("b_rainbow", "무지개", ARTISTIC, true, spacing = 0.03f, streamline = 0.35f, tip = TipShape.ROUND, tipHardness = 0.9f,
+        Brush("b_rainbow", L.t("무지개"), ARTISTIC, true, spacing = 0.03f, streamline = 0.35f, tip = TipShape.ROUND, tipHardness = 0.9f,
             stampHue = 0.0f, strokeHue = 1f, flow = 1f, pressureSize = 0.6f, sizeMin = 2f, sizeMax = 80f, defaultSize = 0.35f),
     )
 }

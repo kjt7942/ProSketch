@@ -1,5 +1,7 @@
 package com.prosketch.app.data
 
+import com.prosketch.app.L
+
 import android.content.Context
 import android.content.SharedPreferences
 import com.prosketch.app.engine.Brush
@@ -8,8 +10,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-enum class FingerMode(val label: String) { AUTO("S펜 사용 시 손가락은 이동만"), PAINT("손가락으로 그리기"), NONE("손가락으로 그리지 않기") }
-enum class PenButtonAction(val label: String) { ERASER("누르는 동안 지우개"), EYEDROPPER("스포이드"), UNDO("실행 취소"), QUICKMENU("QuickMenu"), NONE("동작 없음") }
+enum class FingerMode(val label: String) { AUTO(L.t("S펜 사용 시 손가락은 이동만")), PAINT(L.t("손가락으로 그리기")), NONE(L.t("손가락으로 그리지 않기")) }
+enum class PenButtonAction(val label: String) { ERASER(L.t("누르는 동안 지우개")), EYEDROPPER(L.t("스포이드")), UNDO(L.t("실행 취소")), QUICKMENU("QuickMenu"), NONE(L.t("동작 없음")) }
 
 class Prefs(ctx: Context) {
     private val sp: SharedPreferences = ctx.getSharedPreferences("prosketch", Context.MODE_PRIVATE)
@@ -41,6 +43,9 @@ class Prefs(ctx: Context) {
     var selectionMaskOpacity: Float get() = f("selMaskOpacity", 1f); set(v) = put { putFloat("selMaskOpacity", v) }
     var pressureSmoothing: Float get() = f("pressureSmoothing", 0.15f); set(v) = put { putFloat("pressureSmoothing", v) }
     var sidebarOffset: Float get() = f("sidebarOffset", 0.42f); set(v) = put { putFloat("sidebarOffset", v) }
+    /** 0 = system, 1 = 한국어, 2 = English (read by [com.prosketch.app.L] before anything else). */
+    var language: Int get() = sp.getInt("language", 0); set(v) = put { putInt("language", v) }
+    var onboarded: Boolean get() = b("onboarded", false); set(v) = put { putBoolean("onboarded", v) }
     var colorDropThreshold: Float get() = f("colorDropThreshold", 0.3f); set(v) = put { putFloat("colorDropThreshold", v) }
     /** ColorDrop gap closing in canvas pixels (0 = off): fills line art with small gaps without leaking. */
     var colorDropGap: Int get() = sp.getInt("colorDropGap", 0); set(v) = put { putInt("colorDropGap", v) }
@@ -107,24 +112,24 @@ class PaletteStore(ctx: Context) {
     init { load() }
 
     private fun defaults(): List<Palette> = listOf(
-        Palette("default", "기본", mutableListOf(
+        Palette("default", L.t("기본"), mutableListOf(
             0xFF000000, 0xFF3A3A3A, 0xFF7A7A7A, 0xFFBDBDBD, 0xFFFFFFFF, 0xFFE53935, 0xFFFB8C00, 0xFFFDD835, 0xFF7CB342, 0xFF00897B,
             0xFF039BE5, 0xFF3949AB, 0xFF8E24AA, 0xFFD81B60, 0xFF6D4C41, 0xFFFFCDD2, 0xFFFFE0B2, 0xFFFFF9C4, 0xFFC8E6C9, 0xFFB3E5FC,
         ).map { it.toInt() }.toMutableList()),
-        Palette("skin", "피부 톤", mutableListOf(
+        Palette("skin", L.t("피부 톤"), mutableListOf(
             0xFFFFE6D5, 0xFFF9D2B6, 0xFFF1C27D, 0xFFE0AC69, 0xFFC68642, 0xFFA0662F, 0xFF8D5524, 0xFF6B3E1F, 0xFF4A2A14, 0xFF2E1A0E,
             0xFFF4B6A8, 0xFFE8968A, 0xFFD87A6F, 0xFFB85C55, 0xFF8E4440,
         ).map { it.toInt() }.toMutableList()),
-        Palette("pastel", "파스텔", mutableListOf(
+        Palette("pastel", L.t("파스텔"), mutableListOf(
             0xFFFFADAD, 0xFFFFD6A5, 0xFFFDFFB6, 0xFFCAFFBF, 0xFF9BF6FF, 0xFFA0C4FF, 0xFFBDB2FF, 0xFFFFC6FF, 0xFFFFFFFC, 0xFFE4C1F9,
         ).map { it.toInt() }.toMutableList()),
-        Palette("sunset", "노을", mutableListOf(
+        Palette("sunset", L.t("노을"), mutableListOf(
             0xFF03071E, 0xFF370617, 0xFF6A040F, 0xFF9D0208, 0xFFD00000, 0xFFDC2F02, 0xFFE85D04, 0xFFF48C06, 0xFFFAA307, 0xFFFFBA08,
         ).map { it.toInt() }.toMutableList()),
-        Palette("forest", "숲", mutableListOf(
+        Palette("forest", L.t("숲"), mutableListOf(
             0xFF081C15, 0xFF1B4332, 0xFF2D6A4F, 0xFF40916C, 0xFF52B788, 0xFF74C69D, 0xFF95D5B2, 0xFFB7E4C7, 0xFFD8F3DC, 0xFF6F4E37,
         ).map { it.toInt() }.toMutableList()),
-        Palette("gray", "회색조", (0..10).map { android.graphics.Color.rgb(it * 25, it * 25, it * 25) }.toMutableList()),
+        Palette("gray", L.t("회색조"), (0..10).map { android.graphics.Color.rgb(it * 25, it * 25, it * 25) }.toMutableList()),
     )
 
     private fun load() {
@@ -224,7 +229,7 @@ class BrushStore(ctx: Context) {
     }
 
     fun duplicate(b: Brush): Brush {
-        val nb = b.duplicate("u_" + System.currentTimeMillis(), b.name + " 복사본").apply { category = DefaultBrushes.CUSTOM }
+        val nb = b.duplicate("u_" + System.currentTimeMillis(), b.name + L.t(" 복사본")).apply { category = DefaultBrushes.CUSTOM }
         update(nb)
         return nb
     }

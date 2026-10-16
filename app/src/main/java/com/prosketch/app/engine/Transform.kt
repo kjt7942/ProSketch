@@ -1,5 +1,7 @@
 package com.prosketch.app.engine
 
+import com.prosketch.app.L
+
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
@@ -14,8 +16,8 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.random.Random
 
-enum class TransformMode(val label: String) { FREEFORM("자유형태"), UNIFORM("균등"), DISTORT("왜곡"), WARP("뒤틀기") }
-enum class Interpolation(val label: String) { NEAREST("최근접 이웃"), BILINEAR("쌍선형"), BICUBIC("쌍입방") }
+enum class TransformMode(val label: String) { FREEFORM(L.t("자유형태")), UNIFORM(L.t("균등")), DISTORT(L.t("왜곡")), WARP(L.t("뒤틀기")) }
+enum class Interpolation(val label: String) { NEAREST(L.t("최근접 이웃")), BILINEAR(L.t("쌍선형")), BICUBIC(L.t("쌍입방")) }
 
 /**
  * Floating content being transformed. The quad corners (TL, TR, BR, BL) are the single source of truth
@@ -247,8 +249,8 @@ class TransformSession(
 }
 
 enum class LiquifyMode(val label: String) {
-    PUSH("밀기"), TWIRL_RIGHT("오른쪽 비틀기"), TWIRL_LEFT("왼쪽 비틀기"), PINCH("오목"), EXPAND("볼록"),
-    CRYSTALS("크리스털"), EDGE("가장자리"), RECONSTRUCT("재구성")
+    PUSH(L.t("밀기")), TWIRL_RIGHT(L.t("오른쪽 비틀기")), TWIRL_LEFT(L.t("왼쪽 비틀기")), PINCH(L.t("오목")), EXPAND(L.t("볼록")),
+    CRYSTALS(L.t("크리스털")), EDGE(L.t("가장자리")), RECONSTRUCT(L.t("재구성"))
 }
 
 /** Mesh-based liquify. The mesh is drawn with drawBitmapMesh (GPU accelerated on screen). */

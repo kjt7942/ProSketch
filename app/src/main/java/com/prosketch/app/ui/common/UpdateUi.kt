@@ -1,5 +1,7 @@
 package com.prosketch.app.ui.common
 
+import com.prosketch.app.L
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -56,7 +58,7 @@ object UpdateController {
             val result = runCatching { Updater.fetchLatest() }
             phase = result.fold(
                 onSuccess = { rel -> if (rel != null && Updater.isNewer(rel.version, local)) UpdatePhase.Available(rel) else if (silent) UpdatePhase.Idle else UpdatePhase.UpToDate },
-                onFailure = { if (silent) UpdatePhase.Idle else UpdatePhase.Failed("업데이트 확인 실패: ${it.message ?: it.javaClass.simpleName}") },
+                onFailure = { if (silent) UpdatePhase.Idle else UpdatePhase.Failed(L.tf("업데이트 확인 실패: {0}", it.message ?: it.javaClass.simpleName)) },
             )
         }
     }
@@ -67,7 +69,7 @@ object UpdateController {
             runCatching {
                 Updater.download(ctx.applicationContext, rel) { p -> scope.launch(Dispatchers.Main) { if (phase is UpdatePhase.Downloading) phase = UpdatePhase.Downloading(rel, p) } }
             }.onSuccess { phase = UpdatePhase.Ready(rel, it); install(ctx) }
-                .onFailure { phase = UpdatePhase.Failed("다운로드 실패: ${it.message ?: it.javaClass.simpleName}") }
+                .onFailure { phase = UpdatePhase.Failed(L.tf("다운로드 실패: {0}", it.message ?: it.javaClass.simpleName)) }
         }
     }
 
@@ -85,56 +87,68 @@ object UpdateController {
 
 private fun mb(bytes: Long) = "%.1fMB".format(bytes / 1048576f)
 
+/** Release notes as plain text: drop markdown headings, bullets and code ticks. */
+private fun plainNotes(md: String): String = md.lines()
+    .map { it.trim().removePrefix("#").removePrefix("#").removePrefix("#").trim().replace("`", "").replace("**", "") }
+    .map { if (it.startsWith("- ") || it.startsWith("* ")) "• " + it.drop(2) else it }
+    .joinToString("\n").trim()
+
 @Composable
 fun UpdateDialog(ctx: Context) {
     val c = UpdateController
+    // after the user allowed "install unknown apps" in Settings and came back, continue right away
+    androidx.lifecycle.compose.LifecycleResumeEffect(c.phase) {
+        val p = c.phase
+        if (p is UpdatePhase.Ready && p.needPermission && !Updater.needsInstallPermission(ctx)) c.install(ctx)
+        onPauseOrDispose { }
+    }
     val close = { c.phase = UpdatePhase.Idle }
     when (val p = c.phase) {
         UpdatePhase.Idle -> {}
         UpdatePhase.Checking -> AlertDialog(onDismissRequest = close,
-            title = { Text("업데이트 확인") },
-            text = { Column { Text("GitHub에서 최신 버전을 확인하는 중…"); Spacer(Modifier.height(12.dp)); LinearProgressIndicator(Modifier.fillMaxWidth(), color = UI.accent) } },
-            confirmButton = { TextButton(close) { Text("닫기") } })
+            title = { Text(L.t("업데이트 확인")) },
+            text = { Column { Text(L.t("GitHub에서 최신 버전을 확인하는 중…")); Spacer(Modifier.height(12.dp)); LinearProgressIndicator(Modifier.fillMaxWidth(), color = UI.accent) } },
+            confirmButton = { TextButton(close) { Text(L.t("닫기")) } })
         UpdatePhase.UpToDate -> AlertDialog(onDismissRequest = close,
-            title = { Text("최신 버전입니다") },
-            text = { Text("현재 버전 ${Updater.currentVersion(ctx)}이(가) 최신입니다.") },
-            confirmButton = { TextButton(close) { Text("확인") } })
+            title = { Text(L.t("최신 버전입니다")) },
+            text = { Text(L.tf("현재 버전 {0}이(가) 최신입니다.", Updater.currentVersion(ctx))) },
+            confirmButton = { TextButton(close) { Text(L.t("확인")) } })
         is UpdatePhase.Available -> AlertDialog(onDismissRequest = close,
-            title = { Text("새 버전 ${p.rel.version}") },
+            title = { Text(L.tf("새 버전 {0}", p.rel.version)) },
             text = {
                 Column {
-                    Text("현재 ${Updater.currentVersion(ctx)} → ${p.rel.version}  ·  ${mb(p.rel.apkSize)}", color = UI.text2, fontSize = 13.sp)
+                    Text(L.tf("현재 {0} → {1}  ·  {2}", Updater.currentVersion(ctx), p.rel.version, mb(p.rel.apkSize)), color = UI.text2, fontSize = 13.sp)
                     if (p.rel.notes.isNotEmpty()) {
                         Spacer(Modifier.height(10.dp))
-                        Text(p.rel.notes, fontSize = 14.sp, modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()))
+                        Text(plainNotes(p.rel.notes), fontSize = 14.sp, modifier = Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()))
                     }
                     Spacer(Modifier.height(10.dp))
-                    Text("작품은 그대로 유지됩니다.", color = UI.text2, fontSize = 12.sp)
+                    Text(L.t("작품은 그대로 유지됩니다."), color = UI.text2, fontSize = 12.sp)
                 }
             },
-            dismissButton = { TextButton(close) { Text("나중에") } },
-            confirmButton = { TextButton({ c.download(ctx, p.rel) }) { Text("업데이트") } })
+            dismissButton = { TextButton(close) { Text(L.t("나중에")) } },
+            confirmButton = { TextButton({ c.download(ctx, p.rel) }) { Text(L.t("업데이트")) } })
         is UpdatePhase.Downloading -> AlertDialog(onDismissRequest = {},
-            title = { Text("${p.rel.version} 다운로드 중") },
+            title = { Text(L.tf("{0} 다운로드 중", p.rel.version)) },
             text = { Column { LinearProgressIndicator({ p.progress }, Modifier.fillMaxWidth(), color = UI.accent); Spacer(Modifier.height(8.dp)); Text("${(p.progress * 100).toInt()}%", color = UI.text2) } },
             confirmButton = {})
         is UpdatePhase.Ready -> AlertDialog(onDismissRequest = close,
-            title = { Text("설치 준비 완료") },
+            title = { Text(L.t("설치 준비 완료")) },
             text = {
-                Text(if (p.needPermission) "설정에서 'ProSketch'의 '이 출처 허용'을 켠 뒤 돌아와서 [설치]를 누르세요."
-                     else "Android 설치 화면에서 [업데이트]를 누르면 설치됩니다.")
+                Text(if (p.needPermission) L.t("설정에서 'ProSketch'의 '이 출처 허용'을 켠 뒤 돌아와서 [설치]를 누르세요.")
+                     else L.t("Android 설치 화면에서 [업데이트]를 누르면 설치됩니다."))
             },
-            dismissButton = { TextButton(close) { Text("닫기") } },
-            confirmButton = { TextButton({ c.install(ctx) }) { Text("설치") } })
+            dismissButton = { TextButton(close) { Text(L.t("닫기")) } },
+            confirmButton = { TextButton({ c.install(ctx) }) { Text(L.t("설치")) } })
         is UpdatePhase.Failed -> AlertDialog(onDismissRequest = close,
-            title = { Text("업데이트") },
+            title = { Text(L.t("업데이트")) },
             text = { Text(p.message) },
-            dismissButton = { TextButton(close) { Text("닫기") } },
+            dismissButton = { TextButton(close) { Text(L.t("닫기")) } },
             confirmButton = {
                 TextButton({
                     close()
                     ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Updater.RELEASES_PAGE)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }) { Text("릴리스 페이지 열기") }
+                }) { Text(L.t("릴리스 페이지 열기")) }
             })
     }
 }

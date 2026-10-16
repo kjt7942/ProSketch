@@ -1,5 +1,7 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.L
+
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -64,7 +66,7 @@ object Fonts {
             val i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME); if (c.moveToFirst() && i >= 0) c.getString(i) else null
         } ?: "font.ttf"
         val ext = name.substringAfterLast('.', "ttf").lowercase()
-        require(ext in setOf("ttf", "otf", "ttc")) { "TTF, OTF, TTC 글꼴만 가져올 수 있습니다" }
+        require(ext in setOf("ttf", "otf", "ttc")) { L.t("TTF, OTF, TTC 글꼴만 가져올 수 있습니다") }
         val f = File(dir(ctx), name.replace(Regex("[\\\\/:*?\"<>|]"), "_"))
         ctx.contentResolver.openInputStream(uri)!!.use { input -> f.outputStream().use { input.copyTo(it) } }
         // reject files Android cannot load
@@ -85,22 +87,22 @@ fun TextPanel(ed: Editor, layer: Layer, modifier: Modifier = Modifier) {
     val fontPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             val f = Fonts.import(ctx, uri)
-            if (f == null) ed.hud("글꼴을 불러올 수 없습니다") else { fontsRev++; upd(spec.copy(font = "file:" + f.absolutePath)); ed.hud("글꼴 추가: ${f.nameWithoutExtension}") }
+            if (f == null) ed.hud(L.t("글꼴을 불러올 수 없습니다")) else { fontsRev++; upd(spec.copy(font = "file:" + f.absolutePath)); ed.hud(L.tf("글꼴 추가: {0}", f.nameWithoutExtension)) }
         }
     }
     val maxDim = max(ed.doc.width, ed.doc.height).toFloat()
 
-    PanelBox(modifier, title = if (ed.textIsNew) "텍스트 추가" else "텍스트 편집", trailing = {
-        TextBtn("취소") { ed.endTextEdit(false) }
+    PanelBox(modifier, title = if (ed.textIsNew) L.t("텍스트 추가") else L.t("텍스트 편집"), trailing = {
+        TextBtn(L.t("취소")) { ed.endTextEdit(false) }
         Spacer(Modifier.width(6.dp))
-        TextBtn("완료", true) { ed.previewText(spec); ed.endTextEdit(true) }
+        TextBtn(L.t("완료"), true) { ed.previewText(spec); ed.endTextEdit(true) }
     }) {
         Column(Modifier.heightIn(max = 620.dp).verticalScroll(rememberScrollState())) {
             OutlinedTextField(
                 spec.text, { upd(spec.copy(text = it)) }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 6,
                 colors = OutlinedTextFieldDefaults.colors(focusedTextColor = UI.text, unfocusedTextColor = UI.text),
             )
-            SectionLabel("글꼴")
+            SectionLabel(L.t("글꼴"))
             fontsRev.let { }
             val fonts = TextRenderer.systemFamilies + Fonts.imported(ctx).map { "file:" + it.absolutePath to it.nameWithoutExtension }
             Column(Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(10.dp)).background(UI.panel2).verticalScroll(rememberScrollState())) {
@@ -111,46 +113,46 @@ fun TextPanel(ed: Editor, layer: Layer, modifier: Modifier = Modifier) {
                         .combinedClickable(onClick = { upd(spec.copy(font = key)) }).padding(horizontal = 12.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically) {
                         Text(label, color = UI.text, fontSize = 13.sp, modifier = Modifier.width(150.dp))
-                        Text("가나다 Aa 123", color = UI.text, fontSize = 17.sp, fontFamily = family, maxLines = 1)
+                        Text(L.t("가나다 Aa 123"), color = UI.text, fontSize = 17.sp, fontFamily = family, maxLines = 1)
                     }
                 }
             }
             Spacer(Modifier.height(6.dp))
-            TextBtn("글꼴 가져오기 (TTF · OTF)") { fontPicker.launch(arrayOf("font/*", "application/x-font-ttf", "application/x-font-otf", "application/font-sfnt", "application/octet-stream")) }
+            TextBtn(L.t("글꼴 가져오기 (TTF · OTF)")) { fontPicker.launch(arrayOf("font/*", "application/x-font-ttf", "application/x-font-otf", "application/font-sfnt", "application/octet-stream")) }
 
-            SectionLabel("스타일")
+            SectionLabel(L.t("스타일"))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TextBtn("굵게", spec.bold) { upd(spec.copy(bold = !spec.bold)) }
-                TextBtn("기울임", spec.italic) { upd(spec.copy(italic = !spec.italic)) }
-                TextBtn("밑줄", spec.underline) { upd(spec.copy(underline = !spec.underline)) }
-                TextBtn("외곽선", spec.outline) { upd(spec.copy(outline = !spec.outline)) }
-                TextBtn("세로쓰기", spec.vertical) { upd(spec.copy(vertical = !spec.vertical)) }
-                TextBtn("대문자", spec.allCaps) { upd(spec.copy(allCaps = !spec.allCaps)) }
+                TextBtn(L.t("굵게"), spec.bold) { upd(spec.copy(bold = !spec.bold)) }
+                TextBtn(L.t("기울임"), spec.italic) { upd(spec.copy(italic = !spec.italic)) }
+                TextBtn(L.t("밑줄"), spec.underline) { upd(spec.copy(underline = !spec.underline)) }
+                TextBtn(L.t("외곽선"), spec.outline) { upd(spec.copy(outline = !spec.outline)) }
+                TextBtn(L.t("세로쓰기"), spec.vertical) { upd(spec.copy(vertical = !spec.vertical)) }
+                TextBtn(L.t("대문자"), spec.allCaps) { upd(spec.copy(allCaps = !spec.allCaps)) }
             }
             Spacer(Modifier.height(6.dp))
-            Segmented(listOf("왼쪽", "가운데", "오른쪽", "양쪽"), spec.align, Modifier.fillMaxWidth()) { upd(spec.copy(align = it)) }
+            Segmented(listOf(L.t("왼쪽"), L.t("가운데"), L.t("오른쪽"), L.t("양쪽")), spec.align, Modifier.fillMaxWidth()) { upd(spec.copy(align = it)) }
 
-            SectionLabel("디자인")
-            LabeledSlider("크기", spec.size, 8f..maxDim / 2f, "${spec.size.roundToInt()}px", { upd(spec.copy(size = it)) })
-            LabeledSlider("자간", spec.tracking, -0.2f..1f, "%.2f".format(spec.tracking), { upd(spec.copy(tracking = it)) })
-            LabeledSlider("행간", spec.leading, 0.6f..3f, "%.2f".format(spec.leading), { upd(spec.copy(leading = it)) })
-            LabeledSlider("기준선", spec.baseline, -spec.size..spec.size, "${spec.baseline.roundToInt()}px", { upd(spec.copy(baseline = it)) })
+            SectionLabel(L.t("디자인"))
+            LabeledSlider(L.t("크기"), spec.size, 8f..maxDim / 2f, "${spec.size.roundToInt()}px", { upd(spec.copy(size = it)) })
+            LabeledSlider(L.t("자간"), spec.tracking, -0.2f..1f, "%.2f".format(spec.tracking), { upd(spec.copy(tracking = it)) })
+            LabeledSlider(L.t("행간"), spec.leading, 0.6f..3f, "%.2f".format(spec.leading), { upd(spec.copy(leading = it)) })
+            LabeledSlider(L.t("기준선"), spec.baseline, -spec.size..spec.size, "${spec.baseline.roundToInt()}px", { upd(spec.copy(baseline = it)) })
             val boxW = TextRenderer.wrapWidth(spec)
-            LabeledSlider("상자 너비", boxW, spec.size * 0.5f..ed.doc.width.toFloat() * 1.5f, if (spec.autoWidth) "자동" else "${boxW.roundToInt()}px",
+            LabeledSlider(L.t("상자 너비"), boxW, spec.size * 0.5f..ed.doc.width.toFloat() * 1.5f, if (spec.autoWidth) L.t("자동") else "${boxW.roundToInt()}px",
                 { upd(spec.copy(boxWidth = it, autoWidth = false)) })
-            LabeledSlider("불투명도", layer.opacity, 0f..1f, "${(layer.opacity * 100).roundToInt()}%", { ed.setOpacityLive(layer, it) }, { ed.commitOpacity(layer) })
+            LabeledSlider(L.t("불투명도"), layer.opacity, 0f..1f, "${(layer.opacity * 100).roundToInt()}%", { ed.setOpacityLive(layer, it) }, { ed.commitOpacity(layer) })
 
-            SectionLabel("색상 · 위치")
+            SectionLabel(L.t("색상 · 위치"))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).background(Color(spec.color)).border(1.dp, Color(0x55FFFFFF), RoundedCornerShape(8.dp)))
-                TextBtn("현재 색상 적용") { upd(spec.copy(color = ed.color)) }
-                TextBtn("가운데로") {
+                TextBtn(L.t("현재 색상 적용")) { upd(spec.copy(color = ed.color)) }
+                TextBtn(L.t("가운데로")) {
                     val (w, h) = TextRenderer.boxSize(spec)
                     upd(spec.copy(x = (ed.doc.width - w * spec.scale) / 2f, y = (ed.doc.height - h * spec.scale) / 2f, rotation = 0f))
                 }
-                TextBtn("너비 자동", spec.autoWidth) { upd(spec.copy(autoWidth = !spec.autoWidth, boxWidth = TextRenderer.wrapWidth(spec))) }
+                TextBtn(L.t("너비 자동"), spec.autoWidth) { upd(spec.copy(autoWidth = !spec.autoWidth, boxWidth = TextRenderer.wrapWidth(spec))) }
             }
-            Text("이동·크기·회전은 변형 도구로 조절합니다. 텍스트는 래스터화하기 전까지 계속 편집할 수 있습니다.",
+            Text(L.t("이동·크기·회전은 변형 도구로 조절합니다. 텍스트는 래스터화하기 전까지 계속 편집할 수 있습니다."),
                 color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
         }
     }

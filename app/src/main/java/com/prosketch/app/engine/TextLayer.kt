@@ -1,5 +1,7 @@
 package com.prosketch.app.engine
 
+import com.prosketch.app.L
+
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -66,18 +68,18 @@ data class TextSpec(
 object TextRenderer {
     /** Built-in families offered in the font list (Android system fonts, Hangul falls back to the system CJK font). */
     val systemFamilies = listOf(
-        "sans-serif" to "고딕 (Sans)",
-        "sans-serif-medium" to "고딕 Medium",
-        "sans-serif-light" to "고딕 Light",
-        "sans-serif-thin" to "고딕 Thin",
-        "sans-serif-black" to "고딕 Black",
-        "sans-serif-condensed" to "고딕 Condensed",
-        "serif" to "명조 (Serif)",
-        "monospace" to "고정폭 (Mono)",
-        "serif-monospace" to "고정폭 Serif",
-        "casual" to "캐주얼",
-        "cursive" to "필기체",
-        "sans-serif-smallcaps" to "스몰 캡스",
+        "sans-serif" to L.t("고딕 (Sans)"),
+        "sans-serif-medium" to L.t("고딕 Medium"),
+        "sans-serif-light" to L.t("고딕 Light"),
+        "sans-serif-thin" to L.t("고딕 Thin"),
+        "sans-serif-black" to L.t("고딕 Black"),
+        "sans-serif-condensed" to L.t("고딕 Condensed"),
+        "serif" to L.t("명조 (Serif)"),
+        "monospace" to L.t("고정폭 (Mono)"),
+        "serif-monospace" to L.t("고정폭 Serif"),
+        "casual" to L.t("캐주얼"),
+        "cursive" to L.t("필기체"),
+        "sans-serif-smallcaps" to L.t("스몰 캡스"),
     )
 
     private val fileCache = HashMap<String, Typeface>()

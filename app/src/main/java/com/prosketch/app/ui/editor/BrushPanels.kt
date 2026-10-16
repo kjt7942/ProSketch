@@ -1,5 +1,7 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.L
+
 import android.graphics.Bitmap
 import android.graphics.BlendMode
 import android.graphics.Canvas
@@ -140,21 +142,21 @@ fun BrushLibraryPanel(ed: Editor, modifier: Modifier = Modifier) {
     var searching by remember { mutableStateOf(false) }
     var menuFor by remember { mutableStateOf<String?>(null) }
 
-    PanelBox(modifier, title = "브러시 라이브러리 · ${ed.tool.label}", trailing = {
-        IconBtn(Icons.Filled.Search, "검색", selected = searching) { searching = !searching; query = "" }
-        IconBtn(Icons.Filled.Add, "새 브러시") {
+    PanelBox(modifier, title = L.tf("브러시 라이브러리 · {0}", ed.tool.label), trailing = {
+        IconBtn(Icons.Filled.Search, L.t("검색"), selected = searching) { searching = !searching; query = "" }
+        IconBtn(Icons.Filled.Add, L.t("새 브러시")) {
             val nb = ed.brushes.duplicate(ed.currentBrush)
             ed.chooseBrush(nb.id); refresh++
             ed.studioBrushId = nb.id; ed.panel = Panel.BRUSH_STUDIO
         }
     }) {
-        if (searching) OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text("브러시 검색") }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
+        if (searching) OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text(L.t("브러시 검색")) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
         Row(Modifier.height(470.dp)) {
             if (!searching) {
                 Column(Modifier.width(130.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
                     cats.forEach { c ->
                         val sel = c == cat
-                        Text(c, color = if (sel) Color.White else UI.text, fontSize = 14.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
+                        Text(com.prosketch.app.L.t(c), color = if (sel) Color.White else UI.text, fontSize = 14.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (sel) UI.accent else Color.Transparent)
                                 .combinedClickable(onClick = { cat = c }).padding(horizontal = 10.dp, vertical = 10.dp))
                     }
@@ -178,20 +180,20 @@ fun BrushLibraryPanel(ed: Editor, modifier: Modifier = Modifier) {
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(b.name, color = UI.text, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                                if (ed.brushes.isModified(b.id)) Text("수정됨", color = UI.text2, fontSize = 10.sp)
-                                if (sel) Icon(Icons.Filled.Tune, "스튜디오", tint = UI.accent, modifier = Modifier.size(16.dp).padding(start = 4.dp))
+                                if (ed.brushes.isModified(b.id)) Text(L.t("수정됨"), color = UI.text2, fontSize = 10.sp)
+                                if (sel) Icon(Icons.Filled.Tune, L.t("스튜디오"), tint = UI.accent, modifier = Modifier.size(16.dp).padding(start = 4.dp))
                             }
                             BrushPreviewImage(b, Modifier.fillMaxWidth().height(58.dp))
                         }
                         DropdownMenu(menuFor == b.id, { menuFor = null }) {
-                            DropdownMenuItem(text = { Text("브러시 스튜디오") }, onClick = { menuFor = null; ed.chooseBrush(b.id); ed.studioBrushId = b.id; ed.panel = Panel.BRUSH_STUDIO })
-                            DropdownMenuItem(text = { Text("복제") }, onClick = { menuFor = null; ed.brushes.duplicate(b); refresh++ })
-                            if (ed.brushes.isModified(b.id)) DropdownMenuItem(text = { Text("브러시 초기화") }, onClick = { menuFor = null; ed.brushes.reset(b.id); refresh++ })
-                            if (!b.builtIn) DropdownMenuItem(text = { Text("삭제") }, onClick = { menuFor = null; ed.brushes.delete(b.id); refresh++ })
+                            DropdownMenuItem(text = { Text(L.t("브러시 스튜디오")) }, onClick = { menuFor = null; ed.chooseBrush(b.id); ed.studioBrushId = b.id; ed.panel = Panel.BRUSH_STUDIO })
+                            DropdownMenuItem(text = { Text(L.t("복제")) }, onClick = { menuFor = null; ed.brushes.duplicate(b); refresh++ })
+                            if (ed.brushes.isModified(b.id)) DropdownMenuItem(text = { Text(L.t("브러시 초기화")) }, onClick = { menuFor = null; ed.brushes.reset(b.id); refresh++ })
+                            if (!b.builtIn) DropdownMenuItem(text = { Text(L.t("삭제")) }, onClick = { menuFor = null; ed.brushes.delete(b.id); refresh++ })
                         }
                     }
                 }
-                if (list.isEmpty()) Text("브러시가 없습니다", color = UI.text2, modifier = Modifier.padding(16.dp))
+                if (list.isEmpty()) Text(L.t("브러시가 없습니다"), color = UI.text2, modifier = Modifier.padding(16.dp))
             }
         }
     }
@@ -203,75 +205,75 @@ private fun pct(label: String, g: (Brush) -> Float, s: (Brush, Float) -> Unit) =
 private fun signed(label: String, g: (Brush) -> Float, s: (Brush, Float) -> Unit) = P(label, g, s, -1f..1f) { "${(it * 100).roundToInt()}%" }
 
 private val sections: List<Pair<String, List<P>>> = listOf(
-    "획 경로" to listOf(
-        P("간격", { it.spacing }, { b, v -> b.spacing = v }, 0.01f..1.5f),
-        pct("간격 지터", { it.spacingJitter }, { b, v -> b.spacingJitter = v }),
-        P("측면 지터", { it.jitterLateral }, { b, v -> b.jitterLateral = v }, 0f..2f),
-        P("선형 지터", { it.jitterLinear }, { b, v -> b.jitterLinear = v }, 0f..2f),
-        pct("감소", { it.fallOff }, { b, v -> b.fallOff = v }),
+    L.t("획 경로") to listOf(
+        P(L.t("간격"), { it.spacing }, { b, v -> b.spacing = v }, 0.01f..1.5f),
+        pct(L.t("간격 지터"), { it.spacingJitter }, { b, v -> b.spacingJitter = v }),
+        P(L.t("측면 지터"), { it.jitterLateral }, { b, v -> b.jitterLateral = v }, 0f..2f),
+        P(L.t("선형 지터"), { it.jitterLinear }, { b, v -> b.jitterLinear = v }, 0f..2f),
+        pct(L.t("감소"), { it.fallOff }, { b, v -> b.fallOff = v }),
     ),
-    "안정화" to listOf(
-        pct("StreamLine 양", { it.streamline }, { b, v -> b.streamline = v }),
-        pct("안정화 양", { it.stabilization }, { b, v -> b.stabilization = v }),
+    L.t("안정화") to listOf(
+        pct(L.t("StreamLine 양"), { it.streamline }, { b, v -> b.streamline = v }),
+        pct(L.t("안정화 양"), { it.stabilization }, { b, v -> b.stabilization = v }),
     ),
-    "테이퍼" to listOf(
-        pct("시작 테이퍼", { it.taperStart }, { b, v -> b.taperStart = v }),
-        pct("끝 테이퍼", { it.taperEnd }, { b, v -> b.taperEnd = v }),
-        pct("팁 크기", { it.taperSize }, { b, v -> b.taperSize = v }),
-        pct("팁 불투명도", { it.taperOpacity }, { b, v -> b.taperOpacity = v }),
+    L.t("테이퍼") to listOf(
+        pct(L.t("시작 테이퍼"), { it.taperStart }, { b, v -> b.taperStart = v }),
+        pct(L.t("끝 테이퍼"), { it.taperEnd }, { b, v -> b.taperEnd = v }),
+        pct(L.t("팁 크기"), { it.taperSize }, { b, v -> b.taperSize = v }),
+        pct(L.t("팁 불투명도"), { it.taperOpacity }, { b, v -> b.taperOpacity = v }),
     ),
-    "모양" to listOf(
-        pct("경도", { it.tipHardness }, { b, v -> b.tipHardness = v }),
-        P("원형률", { it.roundness }, { b, v -> b.roundness = v }, 0.03f..1f),
-        P("각도", { it.tipAngle }, { b, v -> b.tipAngle = v }, 0f..360f) { "${it.roundToInt()}°" },
-        signed("회전 (획 따라가기)", { it.rotation }, { b, v -> b.rotation = v }),
-        pct("분산", { it.scatter }, { b, v -> b.scatter = v }),
-        P("개수", { it.count.toFloat() }, { b, v -> b.count = v.roundToInt() }, 1f..16f) { "${it.roundToInt()}" },
-        pct("개수 지터", { it.countJitter }, { b, v -> b.countJitter = v }),
-        pct("압력 원형률", { it.pressureRoundness }, { b, v -> b.pressureRoundness = v }),
-        pct("기울기 원형률", { it.tiltRoundness }, { b, v -> b.tiltRoundness = v }),
+    L.t("모양") to listOf(
+        pct(L.t("경도"), { it.tipHardness }, { b, v -> b.tipHardness = v }),
+        P(L.t("원형률"), { it.roundness }, { b, v -> b.roundness = v }, 0.03f..1f),
+        P(L.t("각도"), { it.tipAngle }, { b, v -> b.tipAngle = v }, 0f..360f) { "${it.roundToInt()}°" },
+        signed(L.t("회전 (획 따라가기)"), { it.rotation }, { b, v -> b.rotation = v }),
+        pct(L.t("분산"), { it.scatter }, { b, v -> b.scatter = v }),
+        P(L.t("개수"), { it.count.toFloat() }, { b, v -> b.count = v.roundToInt() }, 1f..16f) { "${it.roundToInt()}" },
+        pct(L.t("개수 지터"), { it.countJitter }, { b, v -> b.countJitter = v }),
+        pct(L.t("압력 원형률"), { it.pressureRoundness }, { b, v -> b.pressureRoundness = v }),
+        pct(L.t("기울기 원형률"), { it.tiltRoundness }, { b, v -> b.tiltRoundness = v }),
     ),
-    "그레인" to listOf(
-        P("크기", { it.grainScale }, { b, v -> b.grainScale = v }, 0.2f..4f) { "${(it * 100).roundToInt()}%" },
-        pct("깊이", { it.grainDepth }, { b, v -> b.grainDepth = v }),
-        pct("대비", { it.grainContrast }, { b, v -> b.grainContrast = v }),
+    L.t("그레인") to listOf(
+        P(L.t("크기"), { it.grainScale }, { b, v -> b.grainScale = v }, 0.2f..4f) { "${(it * 100).roundToInt()}%" },
+        pct(L.t("깊이"), { it.grainDepth }, { b, v -> b.grainDepth = v }),
+        pct(L.t("대비"), { it.grainContrast }, { b, v -> b.grainContrast = v }),
     ),
-    "렌더링" to listOf(
-        pct("흐름", { it.flow }, { b, v -> b.flow = v }),
+    L.t("렌더링") to listOf(
+        pct(L.t("흐름"), { it.flow }, { b, v -> b.flow = v }),
     ),
-    "습식 혼합" to listOf(
-        pct("희석", { it.dilution }, { b, v -> b.dilution = v }),
-        pct("충전", { it.charge }, { b, v -> b.charge = v }),
-        pct("당기기", { it.pull }, { b, v -> b.pull = v }),
-        pct("문지르기 당김", { it.smudgePull }, { b, v -> b.smudgePull = v }),
+    L.t("습식 혼합") to listOf(
+        pct(L.t("희석"), { it.dilution }, { b, v -> b.dilution = v }),
+        pct(L.t("충전"), { it.charge }, { b, v -> b.charge = v }),
+        pct(L.t("당기기"), { it.pull }, { b, v -> b.pull = v }),
+        pct(L.t("문지르기 당김"), { it.smudgePull }, { b, v -> b.smudgePull = v }),
     ),
-    "색상 역학" to listOf(
-        pct("스탬프 색조 지터", { it.stampHue }, { b, v -> b.stampHue = v }),
-        pct("스탬프 채도 지터", { it.stampSat }, { b, v -> b.stampSat = v }),
-        pct("스탬프 밝기 지터", { it.stampBri }, { b, v -> b.stampBri = v }),
-        pct("획 색조 지터", { it.strokeHue }, { b, v -> b.strokeHue = v }),
-        pct("획 채도 지터", { it.strokeSat }, { b, v -> b.strokeSat = v }),
-        pct("획 밝기 지터", { it.strokeBri }, { b, v -> b.strokeBri = v }),
+    L.t("색상 역학") to listOf(
+        pct(L.t("스탬프 색조 지터"), { it.stampHue }, { b, v -> b.stampHue = v }),
+        pct(L.t("스탬프 채도 지터"), { it.stampSat }, { b, v -> b.stampSat = v }),
+        pct(L.t("스탬프 밝기 지터"), { it.stampBri }, { b, v -> b.stampBri = v }),
+        pct(L.t("획 색조 지터"), { it.strokeHue }, { b, v -> b.strokeHue = v }),
+        pct(L.t("획 채도 지터"), { it.strokeSat }, { b, v -> b.strokeSat = v }),
+        pct(L.t("획 밝기 지터"), { it.strokeBri }, { b, v -> b.strokeBri = v }),
     ),
-    "역학" to listOf(
-        signed("속도 → 크기", { it.speedSize }, { b, v -> b.speedSize = v }),
-        signed("속도 → 불투명도", { it.speedOpacity }, { b, v -> b.speedOpacity = v }),
-        pct("크기 지터", { it.jitterSize }, { b, v -> b.jitterSize = v }),
-        pct("불투명도 지터", { it.jitterOpacity }, { b, v -> b.jitterOpacity = v }),
+    L.t("역학") to listOf(
+        signed(L.t("속도 → 크기"), { it.speedSize }, { b, v -> b.speedSize = v }),
+        signed(L.t("속도 → 불투명도"), { it.speedOpacity }, { b, v -> b.speedOpacity = v }),
+        pct(L.t("크기 지터"), { it.jitterSize }, { b, v -> b.jitterSize = v }),
+        pct(L.t("불투명도 지터"), { it.jitterOpacity }, { b, v -> b.jitterOpacity = v }),
     ),
-    "S펜" to listOf(
-        pct("압력 → 크기", { it.pressureSize }, { b, v -> b.pressureSize = v }),
-        pct("압력 → 불투명도", { it.pressureOpacity }, { b, v -> b.pressureOpacity = v }),
-        pct("압력 → 흐름", { it.pressureFlow }, { b, v -> b.pressureFlow = v }),
-        pct("기울기 → 크기", { it.tiltSize }, { b, v -> b.tiltSize = v }),
-        pct("기울기 → 불투명도", { it.tiltOpacity }, { b, v -> b.tiltOpacity = v }),
-        P("기울기 시작 각도", { it.tiltAngleDeg }, { b, v -> b.tiltAngleDeg = v }, 0f..85f) { "${it.roundToInt()}°" },
+    L.t("S펜") to listOf(
+        pct(L.t("압력 → 크기"), { it.pressureSize }, { b, v -> b.pressureSize = v }),
+        pct(L.t("압력 → 불투명도"), { it.pressureOpacity }, { b, v -> b.pressureOpacity = v }),
+        pct(L.t("압력 → 흐름"), { it.pressureFlow }, { b, v -> b.pressureFlow = v }),
+        pct(L.t("기울기 → 크기"), { it.tiltSize }, { b, v -> b.tiltSize = v }),
+        pct(L.t("기울기 → 불투명도"), { it.tiltOpacity }, { b, v -> b.tiltOpacity = v }),
+        P(L.t("기울기 시작 각도"), { it.tiltAngleDeg }, { b, v -> b.tiltAngleDeg = v }, 0f..85f) { "${it.roundToInt()}°" },
     ),
-    "속성" to listOf(
-        P("최대 크기", { it.sizeMax }, { b, v -> b.sizeMax = v.coerceAtLeast(b.sizeMin + 1) }, 2f..1000f) { "${it.roundToInt()}px" },
-        P("최소 크기", { it.sizeMin }, { b, v -> b.sizeMin = v.coerceAtMost(b.sizeMax - 1) }, 0.5f..200f) { "${"%.1f".format(it)}px" },
-        pct("최대 불투명도", { it.opacityMax }, { b, v -> b.opacityMax = v }),
-        pct("최소 불투명도", { it.opacityMin }, { b, v -> b.opacityMin = v }),
+    L.t("속성") to listOf(
+        P(L.t("최대 크기"), { it.sizeMax }, { b, v -> b.sizeMax = v.coerceAtLeast(b.sizeMin + 1) }, 2f..1000f) { "${it.roundToInt()}px" },
+        P(L.t("최소 크기"), { it.sizeMin }, { b, v -> b.sizeMin = v.coerceAtMost(b.sizeMax - 1) }, 0.5f..200f) { "${"%.1f".format(it)}px" },
+        pct(L.t("최대 불투명도"), { it.opacityMax }, { b, v -> b.opacityMax = v }),
+        pct(L.t("최소 불투명도"), { it.opacityMin }, { b, v -> b.opacityMin = v }),
     ),
 )
 
@@ -294,16 +296,16 @@ fun BrushStudioPanel(ed: Editor, modifier: Modifier = Modifier) {
         }
     }
 
-    PanelBox(modifier, title = "브러시 스튜디오", trailing = {
-        TextBtn("취소") { ed.panel = Panel.BRUSHES }
+    PanelBox(modifier, title = L.t("브러시 스튜디오"), trailing = {
+        TextBtn(L.t("취소")) { ed.panel = Panel.BRUSHES }
         Spacer(Modifier.width(6.dp))
-        TextBtn("완료", selected = true) {
-            ed.brushes.update(b); ed.chooseBrush(b.id); ed.panel = null; ed.hud("브러시 저장됨: ${b.name}")
+        TextBtn(L.t("완료"), selected = true) {
+            ed.brushes.update(b); ed.chooseBrush(b.id); ed.panel = null; ed.hud(L.tf("브러시 저장됨: {0}", b.name))
         }
     }) {
         Row(Modifier.height(520.dp)) {
             Column(Modifier.width(120.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
-                (sections.map { it.first } + "브러시 정보").forEachIndexed { i, s ->
+                (sections.map { it.first } + L.t("브러시 정보")).forEachIndexed { i, s ->
                     val sel = i == section
                     Text(s, color = if (sel) Color.White else UI.text, fontSize = 13.sp,
                         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (sel) UI.accent else Color.Transparent)
@@ -315,32 +317,32 @@ fun BrushStudioPanel(ed: Editor, modifier: Modifier = Modifier) {
                 if (section < sections.size) {
                     val (name, params) = sections[section]
                     when (name) {
-                        "모양" -> {
-                            Text("모양 소스", color = UI.text2, fontSize = 12.sp)
+                        L.t("모양") -> {
+                            Text(L.t("모양 소스"), color = UI.text2, fontSize = 12.sp)
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 6.dp)) {
                                 TipShape.entries.filter { it != TipShape.CUSTOM }.forEach { t -> TextBtn(t.label, b.tip == t) { edit { it.tip = t } } }
-                                TextBtn("이미지 가져오기…", b.tip == TipShape.CUSTOM) { importTarget = 1; picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                                TextBtn(L.t("이미지 가져오기…"), b.tip == TipShape.CUSTOM) { importTarget = 1; picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
                             }
                             TipPreview(b, rev)
-                            SwitchRow("무작위", b.randomized) { v -> edit { it.randomized = v } }
-                            SwitchRow("X 뒤집기", b.flipX) { v -> edit { it.flipX = v } }
-                            SwitchRow("Y 뒤집기", b.flipY) { v -> edit { it.flipY = v } }
-                            SwitchRow("S펜 방위각 따라 회전", b.azimuth) { v -> edit { it.azimuth = v } }
+                            SwitchRow(L.t("무작위"), b.randomized) { v -> edit { it.randomized = v } }
+                            SwitchRow(L.t("X 뒤집기"), b.flipX) { v -> edit { it.flipX = v } }
+                            SwitchRow(L.t("Y 뒤집기"), b.flipY) { v -> edit { it.flipY = v } }
+                            SwitchRow(L.t("S펜 방위각 따라 회전"), b.azimuth) { v -> edit { it.azimuth = v } }
                         }
-                        "그레인" -> {
+                        L.t("그레인") -> {
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 6.dp)) {
                                 GrainType.entries.filter { it != GrainType.CUSTOM }.forEach { t -> TextBtn(t.label, b.grain == t) { edit { it.grain = t } } }
-                                TextBtn("이미지 가져오기…", b.grain == GrainType.CUSTOM) { importTarget = 2; picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                                TextBtn(L.t("이미지 가져오기…"), b.grain == GrainType.CUSTOM) { importTarget = 2; picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
                             }
                         }
-                        "렌더링" -> {
-                            SwitchRow("글레이즈 (획 내 불투명도 유지)", b.glaze, "끄면 겹칠수록 진해지는 혼합 렌더링") { v -> edit { it.glaze = v } }
-                            Text("혼합 모드", color = UI.text2, fontSize = 12.sp)
+                        L.t("렌더링") -> {
+                            SwitchRow(L.t("글레이즈 (획 내 불투명도 유지)"), b.glaze, L.t("끄면 겹칠수록 진해지는 혼합 렌더링")) { v -> edit { it.glaze = v } }
+                            Text(L.t("혼합 모드"), color = UI.text2, fontSize = 12.sp)
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 6.dp)) {
                                 LayerBlend.entries.forEach { m -> TextBtn(m.label, b.strokeBlend == m) { edit { it.strokeBlend = m } } }
                             }
                         }
-                        "테이퍼" -> SwitchRow("손가락 획에도 테이퍼 적용", b.taperFinger) { v -> edit { it.taperFinger = v } }
+                        L.t("테이퍼") -> SwitchRow(L.t("손가락 획에도 테이퍼 적용"), b.taperFinger) { v -> edit { it.taperFinger = v } }
                     }
                     params.forEach { p ->
                         val v = p.get(b)
@@ -348,10 +350,10 @@ fun BrushStudioPanel(ed: Editor, modifier: Modifier = Modifier) {
                     }
                 } else {
                     var name by remember(id) { mutableStateOf(b.name) }
-                    OutlinedTextField(name, { name = it; edit { br -> br.name = it } }, label = { Text("브러시 이름") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(name, { name = it; edit { br -> br.name = it } }, label = { Text(L.t("브러시 이름")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(10.dp))
-                    Text("카테고리: ${b.category}", color = UI.text2, fontSize = 12.sp)
-                    if (b.builtIn) Text("기본 브러시를 수정하면 '수정됨'으로 저장되며, 라이브러리에서 길게 눌러 초기화할 수 있습니다.", color = UI.text2, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                    Text(L.tf("카테고리: {0}", L.t(b.category)), color = UI.text2, fontSize = 12.sp)
+                    if (b.builtIn) Text(L.t("기본 브러시를 수정하면 '수정됨'으로 저장되며, 라이브러리에서 길게 눌러 초기화할 수 있습니다."), color = UI.text2, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                 }
             }
             Spacer(Modifier.width(10.dp))
@@ -385,7 +387,7 @@ private fun DrawingPad(b: Brush, rev: Int, modifier: Modifier) {
         tick++
     }
     Column(modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xFF111113))) {
-        Text("드로잉 패드", color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(8.dp))
+        Text(L.t("드로잉 패드"), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(8.dp))
         Box(
             Modifier.weight(1f).fillMaxWidth().pointerInput(Unit) {
                 awaitEachGesture {
@@ -420,7 +422,7 @@ private fun DrawingPad(b: Brush, rev: Int, modifier: Modifier) {
             }
         }
         Row(Modifier.padding(6.dp)) {
-            IconBtn(Icons.Filled.Close, "패드 지우기", size = 32.dp) { bmp.eraseColor(0); tick++ }
+            IconBtn(Icons.Filled.Close, L.t("패드 지우기"), size = 32.dp) { bmp.eraseColor(0); tick++ }
         }
     }
 }

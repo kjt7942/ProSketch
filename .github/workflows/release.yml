@@ -47,15 +47,16 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           echo "PROSKETCH_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
-      - name: Build signed release APK
+      - name: Build signed GitHub APK and Play bundle
         env:
           PROSKETCH_KEYSTORE_PASSWORD: ${{ secrets.PROSKETCH_KEYSTORE_PASSWORD }}
           PROSKETCH_KEY_ALIAS: ${{ secrets.PROSKETCH_KEY_ALIAS }}
           PROSKETCH_KEY_PASSWORD: ${{ secrets.PROSKETCH_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease -PappVersion=${{ steps.ver.outputs.version }} --no-configuration-cache
-          cp app/build/outputs/apk/release/app-release.apk "ProSketch-${{ steps.ver.outputs.tag }}.apk"
+          ./gradlew assembleGithubRelease bundlePlayRelease -PappVersion=${{ steps.ver.outputs.version }} --no-configuration-cache
+          cp app/build/outputs/apk/github/release/app-github-release.apk "ProSketch-${{ steps.ver.outputs.tag }}.apk"
+          cp app/build/outputs/bundle/playRelease/app-play-release.aab "ProSketch-${{ steps.ver.outputs.tag }}-play.aab"
 
       - name: Verify signature
         run: |
@@ -70,10 +71,10 @@ jobs:
           APK="ProSketch-$TAG.apk"
           PREV=$(git tag --sort=-v:refname | grep -v "^$TAG$" | head -1 || true)
           if [ -n "$PREV" ]; then RANGE="$PREV..HEAD"; else RANGE="HEAD"; fi
-          { echo "## 변경 사항"; git log --pretty='- %s' $RANGE | grep -v '^- Merge' | head -40
+          { echo "## 변경 사항"; git log --pretty='- %s' $RANGE | grep -v -E '^- (Merge|CI:|Release v)' | head -40
             echo; echo "설치: 태블릿에서 \`$APK\`를 내려받아 실행하거나, 앱의 [업데이트 확인]을 누르세요."; } > notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" --clobber
+            gh release upload "$TAG" "$APK" "ProSketch-$TAG-play.aab" --clobber
           else
-            gh release create "$TAG" "$APK" --title "ProSketch $TAG" --notes-file notes.md --target "$GITHUB_SHA"
+            gh release create "$TAG" "$APK" "ProSketch-$TAG-play.aab" --title "ProSketch $TAG" --notes-file notes.md --target "$GITHUB_SHA"
           fi

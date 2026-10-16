@@ -1,5 +1,7 @@
 package com.prosketch.app.engine
 
+import com.prosketch.app.L
+
 import android.graphics.Matrix
 import android.graphics.PointF
 import kotlin.math.PI
@@ -10,11 +12,11 @@ import kotlin.math.hypot
 import kotlin.math.sin
 
 enum class GuideType(val label: String) {
-    GRID("2D 격자"), ISOMETRIC("등각"), PERSPECTIVE("원근"), SYMMETRY("대칭")
+    GRID(L.t("2D 격자")), ISOMETRIC(L.t("등각")), PERSPECTIVE(L.t("원근")), SYMMETRY(L.t("대칭"))
 }
 
 enum class SymmetryType(val label: String) {
-    VERTICAL("수직"), HORIZONTAL("수평"), QUADRANT("사분면"), RADIAL("방사형")
+    VERTICAL(L.t("수직")), HORIZONTAL(L.t("수평")), QUADRANT(L.t("사분면")), RADIAL(L.t("방사형"))
 }
 
 class GuideConfig {
@@ -144,7 +146,7 @@ class SnapAssist(private val cfg: GuideConfig, private val docW: Int, private va
     }
 }
 
-enum class AnimLoop(val label: String) { LOOP("반복"), PINGPONG("핑퐁"), ONESHOT("한 번") }
+enum class AnimLoop(val label: String) { LOOP(L.t("반복")), PINGPONG(L.t("핑퐁")), ONESHOT(L.t("한 번")) }
 
 class AnimationConfig {
     var enabled = false

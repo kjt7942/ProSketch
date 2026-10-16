@@ -36,6 +36,19 @@ android {
             keyPassword = signingValue("keyPassword", "PROSKETCH_KEY_PASSWORD")
         }
     }
+    // "github": sideloaded APK that updates itself from GitHub Releases.
+    // "play": Google Play build — no self-update and no network access at all.
+    flavorDimensions += "dist"
+    productFlavors {
+        create("github") {
+            dimension = "dist"
+            buildConfigField("boolean", "SELF_UPDATE", "true")
+        }
+        create("play") {
+            dimension = "dist"
+            buildConfigField("boolean", "SELF_UPDATE", "false")
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -51,7 +64,7 @@ android {
     buildFeatures {
         compose = true
         aidl = false
-        buildConfig = false
+        buildConfig = true
         shaders = false
     }
     packaging {

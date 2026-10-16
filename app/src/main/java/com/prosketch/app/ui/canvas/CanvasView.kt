@@ -1,5 +1,7 @@
 package com.prosketch.app.ui.canvas
 
+import com.prosketch.app.L
+
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
@@ -504,7 +506,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
         linePaint.pathEffect = null; linePaint.strokeWidth = 1.5f * density
         linePaint.color = 0x66000000; canvas.drawCircle(p.x, cy, r + sw / 2, linePaint); canvas.drawCircle(p.x, cy, r - sw / 2, linePaint)
         linePaint.color = Color.WHITE; canvas.drawCircle(p.x, cy, 4f * density, linePaint)
-        if (dropperLayerOnly) drawPill(canvas, "현재 레이어", p.x, cy - r - 24f * density)
+        if (dropperLayerOnly) drawPill(canvas, L.t("현재 레이어"), p.x, cy - r - 24f * density)
     }
 
     // ------------------------------------------------------------------ ColorDrop (dragged from the colour button)
@@ -517,7 +519,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
         editor.colorDropPreview(d.x, d.y)
         dropPreviewing = true
         dropHoldX = p.x
-        editor.hud("ColorDrop 임계값: ${(editor.fillThreshold * 100).toInt()}% · 좌우로 밀어 조절")
+        editor.hud(L.tf("ColorDrop 임계값: {0}% · 좌우로 밀어 조절", (editor.fillThreshold * 100).toInt()))
     }
 
     fun colorDropMove(x: Float, y: Float) {
@@ -833,7 +835,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
                 val dx = (e.x - downX) / width
                 downX = e.x
                 editor.setOpacityLive(l, l.opacity + dx * 1.2f)
-                editor.hud("불투명도 ${(l.opacity * 100).roundToInt()}%")
+                editor.hud(L.tf("불투명도 {0}%", (l.opacity * 100).roundToInt()))
             }
             else -> {}
         }
@@ -923,7 +925,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
                     when (maxPointers) {
                         2 -> if (editor.prefs.twoFingerUndo) editor.undo()
                         3 -> if (editor.prefs.threeFingerRedo) editor.redo()
-                        4 -> if (editor.prefs.fourTapFullscreen) { editor.fullscreen = !editor.fullscreen; editor.hud(if (editor.fullscreen) "전체 화면" else "전체 화면 해제") }
+                        4 -> if (editor.prefs.fourTapFullscreen) { editor.fullscreen = !editor.fullscreen; editor.hud(if (editor.fullscreen) L.t("전체 화면") else L.t("전체 화면 해제")) }
                     }
                 } else if (maxPointers == 2 && dur < 380 && navTotalScale < 0.62f) {
                     fitToScreen()
@@ -933,7 +935,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
                 editor.zoomText = null
             }
             G.EYEDROPPER -> {
-                dropperColor?.let { if (!cancel) { editor.setColor(it); editor.hud("색상 선택됨") } }
+                dropperColor?.let { if (!cancel) { editor.setColor(it); editor.hud(L.t("색상 선택됨")) } }
                 dropperPos = null; dropperColor = null
             }
             G.OPACITY -> editor.layerOpacityTarget?.let { editor.commitOpacity(it); editor.layerOpacityTarget = null }
@@ -1029,7 +1031,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
             4 -> at.strokeUp()
             2 -> if (!adjMoved && SystemClock.uptimeMillis() - adjDownTime > 450) {
                 at.cloneLocked = !at.cloneLocked
-                editor.hud(if (at.cloneLocked) "복제 소스 고정" else "복제 소스 고정 해제")
+                editor.hud(if (at.cloneLocked) L.t("복제 소스 고정") else L.t("복제 소스 고정 해제"))
             }
         }
         adjDrag = 0

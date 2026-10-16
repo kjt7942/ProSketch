@@ -1,5 +1,7 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.L
+
 import android.graphics.Bitmap
 import android.graphics.BlendMode
 import android.graphics.Canvas
@@ -136,7 +138,7 @@ class SelectionTool(private val ed: Editor) {
     fun autoAdjust(dxFraction: Float) {
         if (autoPoint == null) return
         autoThreshold = (autoThreshold + dxFraction).coerceIn(0f, 1f)
-        ed.hud("선택 임계값: ${(autoThreshold * 100).toInt()}%")
+        ed.hud(L.tf("선택 임계값: {0}%", (autoThreshold * 100).toInt()))
         runAuto(record = false)
     }
 
@@ -150,26 +152,26 @@ class SelectionTool(private val ed: Editor) {
         val shape = SelectionOps.fromBytes(reg.mask, w, h)
         val base = autoBase
         val newMask = if (base == null) shape else SelectionOps.combineMask(base, shape, if (op == SelectionOp.SUBTRACT) SelectionOp.SUBTRACT else SelectionOp.ADD)
-        if (record) ed.applySelection(newMask, record = true, label = "자동 선택")
+        if (record) ed.applySelection(newMask, record = true, label = L.t("자동 선택"))
         else ed.applySelection(newMask, record = false)
         version++
     }
 
     // ---- operations
     fun invert() {
-        ed.applySelection(SelectionOps.invert(ed.selection, ed.doc.width, ed.doc.height), record = true, label = "선택 반전")
+        ed.applySelection(SelectionOps.invert(ed.selection, ed.doc.width, ed.doc.height), record = true, label = L.t("선택 반전"))
     }
 
     fun applyFeather(radius: Float) {
         val s = ed.selection ?: return
-        ed.applySelection(SelectionOps.feather(s, radius), record = true, label = "페더")
+        ed.applySelection(SelectionOps.feather(s, radius), record = true, label = L.t("페더"))
     }
 
     fun clear() { ed.clearSelection(); lasso.clear(); version++ }
 
-    fun saveCurrent() { ed.selection?.let { saved.add(it.copy(Bitmap.Config.ALPHA_8, false)); ed.hud("선택 영역 저장됨") } }
+    fun saveCurrent() { ed.selection?.let { saved.add(it.copy(Bitmap.Config.ALPHA_8, false)); ed.hud(L.t("선택 영역 저장됨")) } }
 
-    fun load(i: Int) { saved.getOrNull(i)?.let { ed.applySelection(it.copy(Bitmap.Config.ALPHA_8, true), record = true, label = "선택 불러오기") } }
+    fun load(i: Int) { saved.getOrNull(i)?.let { ed.applySelection(it.copy(Bitmap.Config.ALPHA_8, true), record = true, label = L.t("선택 불러오기")) } }
 
     fun finish() {
         if (lasso.size >= 3) closeLasso()
@@ -202,15 +204,17 @@ class TransformTool(private val ed: Editor) {
         return px + px.mapNotNull { it.mask } + roots.filter { it.isGroup }.mapNotNull { it.mask }
     }
 
-    fun begin(): Boolean {
+    fun begin(): Boolean = ed.safely(L.t("변형")) { beginImpl() } ?: false
+
+    private fun beginImpl(): Boolean {
         val doc = ed.doc
         val all = targets()
-        if (all.isEmpty()) { ed.hud("변형할 레이어가 없습니다"); return false }
-        if (all.any { doc.effectiveLocked(it) }) { ed.hud("잠긴 레이어입니다"); return false }
+        if (all.isEmpty()) { ed.hud(L.t("변형할 레이어가 없습니다")); return false }
+        if (all.any { doc.effectiveLocked(it) }) { ed.hud(L.t("잠긴 레이어입니다")); return false }
         val content = all.filter { !it.isMask }.ifEmpty { all }
         val sel = ed.selection
         val r = sel?.let { Bitmaps.maskBounds(it) } ?: content.mapNotNull { Bitmaps.opaqueBounds(it.bitmap) }.reduceOrNull { a, b -> Rect(a).apply { union(b) } }
-        if (r == null) { ed.hud("변형할 내용이 없습니다"); return false }
+        if (r == null) { ed.hud(L.t("변형할 내용이 없습니다")); return false }
         val primary = content.first()
         // a lone text layer stays editable; anything mixed is rasterised first
         textBefore = if (primary.isText && all.size == 1 && sel == null) primary.text else null
@@ -234,7 +238,7 @@ class TransformTool(private val ed: Editor) {
         session = TransformSession(primary, pf, r, pb, sel?.copy(Bitmap.Config.ALPHA_8, false), fMask)
         ed.mode = Mode.TRANSFORM
         ed.panel = null
-        if (all.size > 1) ed.hud("레이어 ${content.size}개 변형")
+        if (all.size > 1) ed.hud(L.tf("레이어 {0}개 변형", content.size))
         changed()
         return true
     }
@@ -290,19 +294,19 @@ class TransformTool(private val ed: Editor) {
             val px = com.prosketch.app.engine.TextRenderer.render(newSpec, doc.width, doc.height)
             Bitmaps.paste(layer.bitmap, px, 0, 0); px.recycle()
             layer.text = newSpec
-            parts.add(com.prosketch.app.engine.TextEntry("변형", layer, spec, s.beforeLayer, newSpec, layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+            parts.add(com.prosketch.app.engine.TextEntry(L.t("변형"), layer, spec, s.beforeLayer, newSpec, layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
         } else {
             s.drawFloating(Canvas(layer.bitmap))
             if (spec != null) {
                 layer.text = null
-                parts.add(com.prosketch.app.engine.TextEntry("변형", layer, spec, s.beforeLayer, null, layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
-                ed.hud("텍스트가 래스터화되었습니다")
-            } else parts.add(PixelEntry("변형", layer, full, s.beforeLayer, layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+                parts.add(com.prosketch.app.engine.TextEntry(L.t("변형"), layer, spec, s.beforeLayer, null, layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+                ed.hud(L.t("텍스트가 래스터화되었습니다"))
+            } else parts.add(PixelEntry(L.t("변형"), layer, full, s.beforeLayer, layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
         }
         layer.touch()
         for (e in extras) {
             s.drawFloating(Canvas(e.layer.bitmap), e.floating)
-            parts.add(PixelEntry("변형", e.layer, full, e.before, e.layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+            parts.add(PixelEntry(L.t("변형"), e.layer, full, e.before, e.layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
             e.layer.touch(); e.floating.recycle()
         }
         extras = emptyList(); textBefore = null
@@ -310,10 +314,10 @@ class TransformTool(private val ed: Editor) {
         if (fm != null && s.beforeSelection != null) {
             val nm = SelectionOps.newMask(doc.width, doc.height)
             s.drawFloating(Canvas(nm), fm, Paint(Paint.FILTER_BITMAP_FLAG))
-            parts.add(SelectionEntry("변형", s.beforeSelection, nm.copy(Bitmap.Config.ALPHA_8, false)))
+            parts.add(SelectionEntry(L.t("변형"), s.beforeSelection, nm.copy(Bitmap.Config.ALPHA_8, false)))
             ed.applySelection(nm, record = false)
         }
-        ed.history.push(if (parts.size == 1) parts[0] else CompoundEntry("변형", parts))
+        ed.history.push(if (parts.size == 1) parts[0] else CompoundEntry(L.t("변형"), parts))
         if (ed.mode == Mode.TRANSFORM) ed.mode = Mode.PAINT
         ed.afterCommit()
         changed()
@@ -410,12 +414,14 @@ class AdjustTool(private val ed: Editor) {
     private val dstOut = Paint(Paint.FILTER_BITMAP_FLAG).apply { blendMode = BlendMode.DST_OUT }
     private val plus = Paint(Paint.FILTER_BITMAP_FLAG).apply { blendMode = BlendMode.PLUS }
 
-    fun begin(t: AdjustmentType) {
+    fun begin(t: AdjustmentType) { ed.safely(t.label) { beginImpl(t) } ?: run { end(); ed.invalidate() } }
+
+    private fun beginImpl(t: AdjustmentType) {
         ed.exitModes()
         val l = ed.doc.active ?: return
-        if (l.isGroup) { ed.hud("조정은 그룹이 아닌 레이어에 적용합니다"); return }
-        if (ed.doc.effectiveLocked(l)) { ed.hud("잠긴 레이어입니다"); return }
-        if (!ed.doc.effectiveVisible(l)) { ed.hud("숨겨진 레이어입니다"); return }
+        if (l.isGroup) { ed.hud(L.t("조정은 그룹이 아닌 레이어에 적용합니다")); return }
+        if (ed.doc.effectiveLocked(l)) { ed.hud(L.t("잠긴 레이어입니다")); return }
+        if (!ed.doc.effectiveVisible(l)) { ed.hud(L.t("숨겨진 레이어입니다")); return }
         if (l.isText) ed.rasterizeText(l)
         layer = l
         type = t
@@ -436,7 +442,7 @@ class AdjustTool(private val ed: Editor) {
                 cloneResult = l.bitmap.copy(Bitmap.Config.ARGB_8888, true)
                 if (cloneSource == null || !cloneLocked) cloneSource = PointF(w / 3f, h / 2f)
                 ed.mode = Mode.ADJUST
-                ed.hud("원을 소스 위치로 옮긴 뒤 브러시로 칠하세요 · 원을 길게 누르면 고정")
+                ed.hud(L.t("원을 소스 위치로 옮긴 뒤 브러시로 칠하세요 · 원을 길게 누르면 고정"))
             }
             else -> {
                 src = IntArray(w * h).also { l.bitmap.getPixels(it, 0, w, 0, 0, w, h) }
@@ -444,7 +450,7 @@ class AdjustTool(private val ed: Editor) {
                 preview = l.bitmap.copy(Bitmap.Config.ARGB_8888, true)
                 pencilMask = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                 ed.mode = Mode.ADJUST
-                if (t == AdjustmentType.RECOLOR) ed.hud("십자선을 바꿀 색 위로 옮기세요 · 현재 색상으로 칠해집니다")
+                if (t == AdjustmentType.RECOLOR) ed.hud(L.t("십자선을 바꿀 색 위로 옮기세요 · 현재 색상으로 칠해집니다"))
                 recompute()
             }
         }
@@ -479,11 +485,11 @@ class AdjustTool(private val ed: Editor) {
                 val len = hypot(dxDoc, dyDoc) / max(w, h)
                 params["dist"] = (len * 250f).coerceIn(0f, 100f)
                 params["angle"] = ((Math.toDegrees(atan2(dyDoc, dxDoc).toDouble()).toFloat() + 360f) % 360f)
-                ed.hud("거리 ${params["dist"]!!.toInt()}% · ${params["angle"]!!.toInt()}°")
+                ed.hud(L.tf("거리 {0}% · {1}°", params["dist"]!!.toInt(), params["angle"]!!.toInt()))
             }
             AdjustmentType.CHROMATIC -> {
                 params["dx"] = (dxDoc / w).coerceIn(-1f, 1f); params["dy"] = (dyDoc / h).coerceIn(-1f, 1f)
-                ed.hud("변위 ${hypot(dxDoc, dyDoc).toInt()}px")
+                ed.hud(L.tf("변위 {0}px", hypot(dxDoc, dyDoc).toInt()))
             }
             else -> return
         }
@@ -513,7 +519,7 @@ class AdjustTool(private val ed: Editor) {
     fun colorChanged() { if (type == AdjustmentType.RECOLOR) recompute() }
 
     fun formatParam(p: com.prosketch.app.engine.FilterParam, v: Float): String =
-        if (p.unit == "%") "${v.toInt()}%" else if (p.isSwitch) (if (v >= 0.5f) "켬" else "끔") else "${v.toInt()}${p.unit}"
+        if (p.unit == "%") "${v.toInt()}%" else if (p.isSwitch) (if (v >= 0.5f) L.t("켬") else L.t("끔")) else "${v.toInt()}${p.unit}"
 
     fun curvesChanged() { version++; recompute() }
     fun balanceChanged() { version++; recompute() }
@@ -689,7 +695,7 @@ class AdjustTool(private val ed: Editor) {
                         result.recycle()
                         Bitmaps.paste(l.bitmap, base, 0, 0); base.recycle()
                     } ?: run { Bitmaps.paste(l.bitmap, result, 0, 0); result.recycle() }
-                    ed.history.push(PixelEntry("픽셀 유동화", l, full, before, l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+                    ed.history.push(PixelEntry(L.t("픽셀 유동화"), l, full, before, l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
                     l.touch(); ed.afterCommit()
                 }
             }
@@ -697,7 +703,7 @@ class AdjustTool(private val ed: Editor) {
                 val cr = cloneResult ?: return
                 val before = srcBitmap ?: return
                 Bitmaps.paste(l.bitmap, cr, 0, 0)
-                ed.history.push(PixelEntry("복제", l, full, before.copy(Bitmap.Config.ARGB_8888, false), l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+                ed.history.push(PixelEntry(L.t("복제"), l, full, before.copy(Bitmap.Config.ARGB_8888, false), l.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
                 l.touch(); ed.afterCommit()
             }
             else -> {

@@ -1,5 +1,7 @@
 package com.prosketch.app.data
 
+import com.prosketch.app.L
+
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -34,7 +36,7 @@ object Psd {
         val w = doc.width; val h = doc.height
         val blobs = ArrayList<LayerBlob>()
         if (doc.backgroundVisible) {
-            val bg = Layer.blank(w, h, "배경")
+            val bg = Layer.blank(w, h, L.t("배경"))
             bg.bitmap.eraseColor(doc.backgroundColor or (0xFF shl 24))
             blobs.add(encodeLayer(bg, Rect(0, 0, w, h), "norm", 255, false, 0))
             bg.bitmap.recycle()
@@ -227,15 +229,15 @@ object Psd {
     fun read(bytes: ByteArray): Imported {
         val b = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
         fun sig(): String { val a = ByteArray(4); b.get(a); return String(a, Charsets.US_ASCII) }
-        require(sig() == "8BPS") { "PSD 파일이 아닙니다" }
+        require(sig() == "8BPS") { L.t("PSD 파일이 아닙니다") }
         val version = b.short.toInt()
-        require(version == 1) { "PSB(대형 문서)는 지원하지 않습니다" }
+        require(version == 1) { L.t("PSB(대형 문서)는 지원하지 않습니다") }
         b.position(b.position() + 6)
         val channels = b.short.toInt()
         val h = b.int; val w = b.int
         val depth = b.short.toInt(); val mode = b.short.toInt()
-        require(depth == 8) { "8비트 PSD만 지원합니다 (현재 ${depth}비트)" }
-        require(mode == 3 || mode == 1) { "RGB 또는 회색조 PSD만 지원합니다" }
+        require(depth == 8) { L.tf("8비트 PSD만 지원합니다 (현재 {0}비트)", depth) }
+        require(mode == 3 || mode == 1) { L.t("RGB 또는 회색조 PSD만 지원합니다") }
         b.position(b.position() + b.int)  // colour mode data
         b.position(b.position() + b.int)  // image resources
         val lmLen = b.int.toLong() and 0xFFFFFFFFL
@@ -315,7 +317,7 @@ object Psd {
                     if (rec.section == 3) { groupStarts.addLast(layers.size); continue }
                     val layer: Layer
                     if (rec.section == 1 || rec.section == 2) {
-                        layer = Layer.group(rec.name.ifBlank { "그룹" })
+                        layer = Layer.group(rec.name.ifBlank { L.t("그룹") })
                         val start = groupStarts.removeLastOrNull() ?: 0
                         for (k in start until layers.size) if (layers[k].parentId == 0L) layers[k].parentId = layer.id
                         layer.expanded = rec.section == 1
@@ -323,7 +325,7 @@ object Psd {
                         layer.passThrough = gb == "pass"
                         if (!layer.passThrough) layer.blend = LayerBlend.fromPsd(gb)
                     } else {
-                        layer = Layer.blank(w, h, rec.name.ifBlank { "레이어" })
+                        layer = Layer.blank(w, h, rec.name.ifBlank { L.t("레이어") })
                         if (rw > 0 && rh > 0) {
                             val px = IntArray(rw * rh)
                             val pa = planes[-1]; val pr = planes[0]; val pg = planes[1] ?: pr; val pb = planes[2] ?: pr
@@ -382,7 +384,7 @@ object Psd {
                 val a = if (!gray && channels > 3) planes[3][i].toInt() and 0xFF else if (gray && channels > 1) planes[1][i].toInt() and 0xFF else 255
                 px[i] = (a shl 24) or (r shl 16) or (g shl 8) or bl
             }
-            val l = Layer.blank(w, h, "이미지")
+            val l = Layer.blank(w, h, L.t("이미지"))
             l.bitmap.setPixels(px, 0, w, 0, 0, w, h)
             layers.add(l)
         }
@@ -398,7 +400,7 @@ object Psd {
                 val counts = IntArray(h) { b.short.toInt() and 0xFFFF }
                 for (y in 0 until h) unpack(b, counts[y], out, y * w, w)
             }
-            else -> throw IllegalArgumentException("ZIP 압축 PSD는 지원하지 않습니다")
+            else -> throw IllegalArgumentException(L.t("ZIP 압축 PSD는 지원하지 않습니다"))
         }
         return out
     }
