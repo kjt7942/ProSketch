@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -320,15 +321,53 @@ private fun ValuePicker(ed: Editor) {
 private fun PalettesView(ed: Editor) {
     var refresh by remember { mutableIntStateOf(0) }
     val store = ed.palettes
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    fun addPalette(name: String, colors: List<Int>) {
+        store.palettes.add(0, Palette("p_" + System.nanoTime(), name.ifBlank { L.t("무제 팔레트") }, colors.take(60).toMutableList()))
+        store.activeId = store.palettes[0].id
+        store.save(); refresh++
+    }
+    val fileImport = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            val name = ctx.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val i = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME); if (c.moveToFirst() && i >= 0) c.getString(i) else null
+            } ?: "palette"
+            val bytes = ctx.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
+            val list = com.prosketch.app.data.PaletteIO.read(bytes, name)
+            list.forEach { addPalette(it.name, it.colors) }
+            ed.hud(L.tf("팔레트 {0}개를 가져왔습니다", list.size))
+        }.onFailure { ed.hud(it.message ?: L.t("팔레트를 가져올 수 없습니다")) }
+    }
+    val photoImport = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            val src = android.graphics.ImageDecoder.createSource(ctx.contentResolver, uri)
+            val bmp = android.graphics.ImageDecoder.decodeBitmap(src) { d, info, _ ->
+                d.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                val k = minOf(1f, 640f / maxOf(info.size.width, info.size.height))
+                d.setTargetSize(maxOf(1, (info.size.width * k).toInt()), maxOf(1, (info.size.height * k).toInt()))
+            }
+            val colors = com.prosketch.app.data.PaletteIO.fromImage(bmp)
+            bmp.recycle()
+            addPalette(L.t("사진 팔레트"), colors)
+            ed.hud(L.tf("사진에서 색상 {0}개를 뽑았습니다", colors.size))
+        }.onFailure { ed.hud(L.t("이미지를 열 수 없습니다")) }
+    }
+    fun share(p: Palette) {
+        runCatching {
+            val f = java.io.File(com.prosketch.app.data.Exporter.exportDir(ctx), com.prosketch.app.data.Exporter.safeName(p.name) + ".swatches")
+            f.outputStream().use { com.prosketch.app.data.PaletteIO.writeSwatches(p.name, p.colors, it) }
+            com.prosketch.app.data.Exporter.share(ctx, f, "application/zip")
+        }
+    }
     Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
         refresh.let { }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(L.t("팔레트"), color = UI.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
-            TextBtn(L.t("+ 새 팔레트")) {
-                store.palettes.add(0, Palette("p_" + System.currentTimeMillis(), L.t("무제 팔레트"), mutableListOf()))
-                store.activeId = store.palettes[0].id
-                store.save(); refresh++
-            }
+            TextBtn(L.t("+ 새 팔레트")) { addPalette(L.t("무제 팔레트"), emptyList()) }
+            TextBtn(L.t("파일에서")) { fileImport.launch(arrayOf("*/*")) }
+            TextBtn(L.t("사진에서")) { photoImport.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) }
         }
         for (p in store.palettes.toList()) {
             Spacer(Modifier.height(10.dp))
@@ -336,6 +375,7 @@ private fun PalettesView(ed: Editor) {
                 val active = p.id == store.activeId
                 Text((if (active) "✓ " else "") + p.name, color = if (active) UI.accent else UI.text, fontSize = 13.sp, modifier = Modifier.weight(1f)
                     .combinedClickable(onClick = { store.activeId = p.id; store.save(); refresh++ }))
+                Icon(Icons.Filled.Share, L.t("공유"), tint = UI.text2, modifier = Modifier.padding(end = 10.dp).size(18.dp).combinedClickable(onClick = { share(p) }))
                 if (store.palettes.size > 1) Icon(Icons.Filled.Delete, L.t("삭제"), tint = UI.text2, modifier = Modifier.size(18.dp)
                     .combinedClickable(onClick = {}, onLongClick = { store.palettes.remove(p); if (store.activeId == p.id) store.activeId = store.palettes[0].id; store.save(); refresh++ }))
             }
@@ -353,7 +393,7 @@ private fun PalettesView(ed: Editor) {
             }
         }
         Spacer(Modifier.height(6.dp))
-        Text(L.t("견본을 길게 눌러 삭제 · + 를 눌러 현재 색상 저장"), color = UI.text2, fontSize = 11.sp)
+        Text(L.t("견본을 길게 눌러 삭제 · + 를 눌러 현재 색상 저장 · 가져오기: .swatches(Procreate), .ase, .aco · 공유는 .swatches"), color = UI.text2, fontSize = 11.sp)
     }
 }
 

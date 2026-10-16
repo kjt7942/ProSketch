@@ -125,20 +125,26 @@ fun ActionsPanel(ed: Editor, modifier: Modifier = Modifier) {
     var replay by remember { mutableStateOf(false) }
     var purgeAsk by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
+    // results arrive while this panel is still composed; it closes itself afterwards
     val photo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        ed.panel = null
         if (uri != null) decodeUri(ctx, uri, maxOf(ed.doc.width, ed.doc.height))?.let { ed.insertImage(it); it.recycle() } ?: ed.hud(L.t("이미지를 열 수 없습니다"))
     }
     val privatePhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        ed.panel = null
         if (uri != null) decodeUri(ctx, uri, maxOf(ed.doc.width, ed.doc.height))?.let { ed.insertImage(it, L.t("비공개 사진"), private = true); it.recycle() } ?: ed.hud(L.t("이미지를 열 수 없습니다"))
     }
     val fileInsert = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        ed.panel = null
         if (uri != null) decodeUri(ctx, uri, maxOf(ed.doc.width, ed.doc.height))?.let { ed.insertImage(it, L.t("삽입된 파일")); it.recycle() } ?: ed.hud(L.t("이미지를 열 수 없습니다"))
     }
     val cameraFile = remember { java.io.File(ctx.cacheDir, "camera").apply { mkdirs() }.let { java.io.File(it, "photo.jpg") } }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        ed.panel = null
         if (ok) decodeUri(ctx, android.net.Uri.fromFile(cameraFile), maxOf(ed.doc.width, ed.doc.height))?.let { ed.insertImage(it, L.t("사진")); it.recycle() }
     }
     val refPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        ed.panel = null
         if (uri != null) decodeUri(ctx, uri, 1200)?.let { ed.referenceImage = it; ed.referenceVisible = true }
     }
 
@@ -148,20 +154,19 @@ fun ActionsPanel(ed: Editor, modifier: Modifier = Modifier) {
         Column(Modifier.height(500.dp).verticalScroll(rememberScrollState())) {
             when (tab) {
                 0 -> {
-                    MenuRow(L.t("사진 삽입"), Icons.Filled.Image) { ed.panel = null; photo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-                    MenuRow(L.t("파일 삽입"), Icons.Filled.Image, sub = "PNG · JPEG · WEBP") { ed.panel = null; fileInsert.launch(arrayOf("image/*")) }
+                    MenuRow(L.t("사진 삽입"), Icons.Filled.Image) { photo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                    MenuRow(L.t("파일 삽입"), Icons.Filled.Image, sub = "PNG · JPEG · WEBP") { fileInsert.launch(arrayOf("image/*")) }
                     MenuRow(L.t("사진 찍기"), Icons.Filled.Image) {
-                        ed.panel = null
                         val uri = androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", cameraFile)
                         runCatching { camera.launch(uri) }.onFailure { ed.hud(L.t("카메라 앱을 열 수 없습니다")) }
                     }
-                    MenuRow(L.t("비공개 사진 삽입"), Icons.Filled.Image, sub = L.t("타임랩스와 갤러리 미리보기에서 제외")) { ed.panel = null; privatePhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                    MenuRow(L.t("비공개 사진 삽입"), Icons.Filled.Image, sub = L.t("타임랩스와 갤러리 미리보기에서 제외")) { privatePhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
                     MenuRow(L.t("텍스트 추가"), Icons.Filled.TextFields) { ed.startNewText() }
                     MenuRow(L.t("잘라내기"), Icons.Filled.ContentCut) { ed.cut() }
                     MenuRow(L.t("복사"), Icons.Filled.ContentCopy) { ed.copy() }
                     MenuRow(L.t("모두 복사"), Icons.Filled.ContentCopy) { ed.copy(all = true) }
                     MenuRow(L.t("붙여넣기"), Icons.Filled.ContentPaste) { ed.paste(); ed.panel = null }
-                    MenuRow(L.t("참조 이미지 불러오기"), Icons.Filled.PictureInPicture) { ed.panel = null; refPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+                    MenuRow(L.t("참조 이미지 불러오기"), Icons.Filled.PictureInPicture) { refPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
                 }
                 1 -> {
                     MenuRow(L.t("자르기 및 크기 조정"), Icons.Filled.AspectRatio) { cropDialog = true }

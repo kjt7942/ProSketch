@@ -16,15 +16,20 @@ object L {
     /** [mode]: 0 = follow the system, 1 = Korean, 2 = English. */
     fun init(ctx: Context, mode: Int) {
         english = when (mode) { 1 -> false; 2 -> true; else -> Locale.getDefault().language != "ko" }
-        map = if (!english) emptyMap() else runCatching {
-            ctx.assets.open("i18n/en.tsv").bufferedReader(Charsets.UTF_8).useLines { lines ->
-                lines.mapNotNull { line ->
-                    val i = line.indexOf('\t')
-                    if (i <= 0) null else unescape(line.substring(0, i)) to unescape(line.substring(i + 1))
-                }.toMap()
-            }
-        }.getOrDefault(emptyMap())
+        map = if (!english) emptyMap() else load(ctx)
     }
+
+    private fun load(ctx: Context): Map<String, String> = runCatching {
+        val out = HashMap<String, String>()
+        ctx.assets.open("i18n/en.tsv").bufferedReader(Charsets.UTF_8).useLines { lines ->
+            for (raw in lines) {
+                val line = raw.trimEnd('\r')
+                val i = line.indexOf('\t')
+                if (i > 0) out[unescape(line.substring(0, i))] = unescape(line.substring(i + 1))
+            }
+        }
+        out as Map<String, String>
+    }.getOrDefault(emptyMap())
 
     private fun unescape(s: String) = s.replace("\\n", "\n").replace("\\t", "\t")
 

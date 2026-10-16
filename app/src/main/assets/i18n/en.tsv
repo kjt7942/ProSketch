@@ -839,3 +839,13 @@ ProSketch 파일이 아닙니다	Not a ProSketch file
 아티스틱	Artistic
 최근 사용	Recent
 시스템 설정	System default
+팔레트 {0}개를 가져왔습니다	Imported {0} palettes
+팔레트를 가져올 수 없습니다	Can't import the palette
+사진 팔레트	Photo palette
+사진에서 색상 {0}개를 뽑았습니다	Picked {0} colours from the photo
+파일에서	From file
+사진에서	From photo
+견본을 길게 눌러 삭제 · + 를 눌러 현재 색상 저장 · 가져오기: .swatches(Procreate), .ase, .aco · 공유는 .swatches	Hold a swatch to delete it · + saves the current colour · import .swatches (Procreate), .ase, .aco · share as .swatches
+지원하지 않는 팔레트 형식입니다 (.swatches, .ase, .aco)	Unsupported palette format (.swatches, .ase, .aco)
+Swatches.json이 없습니다	Swatches.json is missing
+팔레트	Palette
