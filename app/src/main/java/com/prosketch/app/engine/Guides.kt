@@ -148,10 +148,14 @@ enum class AnimLoop(val label: String) { LOOP("반복"), PINGPONG("핑퐁"), ONE
 
 class AnimationConfig {
     var enabled = false
-    var fps = 12
-    var onionFrames = 2
+    var fps = 12                       // 1..60
+    var onionFrames = 2                // 0..12
     var onionOpacity = 0.45f
     var loop = AnimLoop.LOOP
     var colorOnion = true
+    var onionBefore = 0xFFE5484D.toInt()   // frames behind (Procreate default red)
+    var onionAfter = 0xFF30A46C.toInt()    // frames ahead (green)
+    var blendPrimary = false           // off: the current frame sits solid on top of the onion skins
     var firstFrameBackground = false
+    var lastFrameForeground = false
 }

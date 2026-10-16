@@ -38,8 +38,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 
 // ====================================================================== Selection
 
@@ -175,61 +180,137 @@ class TransformTool(private val ed: Editor) {
         private set
     var version by mutableIntStateOf(0)
 
+    /** Every layer moved by the session after the primary one: groups, secondary layers and masks. */
+    private class Extra(val layer: Layer, val floating: Bitmap, val before: Bitmap)
+    private var extras: List<Extra> = emptyList()
+    /** Text layer transformed as editable text (move / scale / rotate keep it editable). */
+    private var textBefore: com.prosketch.app.engine.TextSpec? = null
+
     fun changed() { version++; ed.invalidate() }
 
+    /** Pixel layers a transform should move: the selection (primary + secondaries, groups expanded) plus their masks. */
+    private fun targets(): List<Layer> {
+        val doc = ed.doc
+        val active = doc.active ?: return emptyList()
+        if (active.isMask) return listOf(active)
+        val roots = ed.selectedLayers().ifEmpty { listOf(active) }
+        val px = roots.flatMap { doc.pixelLayers(it) }.distinct()
+        return px + px.mapNotNull { it.mask } + roots.filter { it.isGroup }.mapNotNull { it.mask }
+    }
+
     fun begin(): Boolean {
-        val layer = ed.doc.active ?: return false
-        if (layer.locked) { ed.hud("잠긴 레이어입니다"); return false }
+        val doc = ed.doc
+        val all = targets()
+        if (all.isEmpty()) { ed.hud("변형할 레이어가 없습니다"); return false }
+        if (all.any { doc.effectiveLocked(it) }) { ed.hud("잠긴 레이어입니다"); return false }
+        val content = all.filter { !it.isMask }.ifEmpty { all }
         val sel = ed.selection
-        val r = (sel?.let { Bitmaps.maskBounds(it) } ?: Bitmaps.opaqueBounds(layer.bitmap))
+        val r = sel?.let { Bitmaps.maskBounds(it) } ?: content.mapNotNull { Bitmaps.opaqueBounds(it.bitmap) }.reduceOrNull { a, b -> Rect(a).apply { union(b) } }
         if (r == null) { ed.hud("변형할 내용이 없습니다"); return false }
-        val before = layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)
-        val floating = Bitmaps.crop(layer.bitmap, r)
-        var fMask: Bitmap? = null
-        val c = Canvas(layer.bitmap)
-        if (sel != null) {
-            fMask = Bitmaps.crop(sel, r)
-            Canvas(floating).drawBitmap(sel, -r.left.toFloat(), -r.top.toFloat(), Paint().apply { blendMode = BlendMode.DST_IN })
-            c.drawBitmap(sel, 0f, 0f, Paint().apply { blendMode = BlendMode.DST_OUT })
-        } else {
-            c.save(); c.clipRect(r); c.drawColor(0, BlendMode.CLEAR); c.restore()
+        val primary = content.first()
+        // a lone text layer stays editable; anything mixed is rasterised first
+        textBefore = if (primary.isText && all.size == 1 && sel == null) primary.text else null
+        if (textBefore == null) all.filter { it.isText }.forEach { ed.rasterizeText(it) }
+        val dstOut = Paint().apply { blendMode = BlendMode.DST_OUT }
+        val dstIn = Paint().apply { blendMode = BlendMode.DST_IN }
+        fun lift(l: Layer): Pair<Bitmap, Bitmap> {
+            val before = l.bitmap.copy(Bitmap.Config.ARGB_8888, false)
+            val floating = Bitmaps.crop(l.bitmap, r)
+            val c = Canvas(l.bitmap)
+            if (sel != null) {
+                Canvas(floating).drawBitmap(sel, -r.left.toFloat(), -r.top.toFloat(), dstIn)
+                c.drawBitmap(sel, 0f, 0f, dstOut)
+            } else { c.save(); c.clipRect(r); c.drawColor(0, BlendMode.CLEAR); c.restore() }
+            l.touch()
+            return floating to before
         }
-        layer.touch()
-        session = TransformSession(layer, floating, r, before, sel?.copy(Bitmap.Config.ALPHA_8, false), fMask)
-        ed.mode = com.prosketch.app.ui.editor.Mode.TRANSFORM
+        val (pf, pb) = lift(primary)
+        extras = all.filter { it !== primary }.map { l -> val (f, b) = lift(l); Extra(l, f, b) }
+        val fMask = sel?.let { Bitmaps.crop(it, r) }
+        session = TransformSession(primary, pf, r, pb, sel?.copy(Bitmap.Config.ALPHA_8, false), fMask)
+        ed.mode = Mode.TRANSFORM
         ed.panel = null
+        if (all.size > 1) ed.hud("레이어 ${content.size}개 변형")
         changed()
         return true
     }
 
+    private fun floatingFor(layer: Layer): Bitmap? {
+        val s = session ?: return null
+        if (s.layer === layer) return s.floating
+        return extras.firstOrNull { it.layer === layer }?.floating
+    }
+
     fun drawLive(canvas: Canvas, layer: Layer, paint: Paint?): Boolean {
         val s = session ?: return false
-        if (s.layer !== layer) return false
+        val f = floatingFor(layer) ?: return false
         canvas.saveLayer(RectF(0f, 0f, ed.doc.width.toFloat(), ed.doc.height.toFloat()), paint)
         canvas.drawBitmap(layer.bitmap, 0f, 0f, null)
-        s.drawFloating(canvas)
+        s.drawFloating(canvas, f)
         canvas.restore()
         return true
+    }
+
+    /** New text spec when the session is a pure move / scale / rotation of the box, else null. */
+    private fun similarityText(s: TransformSession, spec: com.prosketch.app.engine.TextSpec): com.prosketch.app.engine.TextSpec? {
+        if (s.mode == TransformMode.WARP || s.mode == TransformMode.DISTORT) return null
+        val c = s.corners
+        val r = s.origin
+        val ux = c[2] - c[0]; val uy = c[3] - c[1]; val vx = c[6] - c[0]; val vy = c[7] - c[1]
+        val sU = hypot(ux, uy) / r.width().coerceAtLeast(1); val sV = hypot(vx, vy) / r.height().coerceAtLeast(1)
+        if (abs(sU - sV) > 0.02f * sU) return null
+        val cross = ux * vy - uy * vx
+        if (cross <= 0f) return null                                   // flipped
+        if (abs(ux * vx + uy * vy) > 0.02f * hypot(ux, uy) * hypot(vx, vy)) return null   // skewed
+        val theta = Math.toDegrees(atan2(uy, ux).toDouble()).toFloat()
+        // map the old box centre through the same similarity
+        val (w, h) = com.prosketch.app.engine.TextRenderer.boxSize(spec)
+        val oc = floatArrayOf(spec.x + w * spec.scale / 2f, spec.y + h * spec.scale / 2f)
+        val cosT = cos(Math.toRadians(theta.toDouble())).toFloat(); val sinT = sin(Math.toRadians(theta.toDouble())).toFloat()
+        val px = (oc[0] - r.left) * sU; val py = (oc[1] - r.top) * sU
+        val nx = c[0] + px * cosT - py * sinT; val ny = c[1] + px * sinT + py * cosT
+        val ns = spec.scale * sU
+        return spec.copy(scale = ns, rotation = spec.rotation + theta, x = nx - w * ns / 2f, y = ny - h * ns / 2f)
     }
 
     fun commit() {
         val s = session ?: return
         session = null
-        val layer = s.layer
-        s.drawFloating(Canvas(layer.bitmap))
-        val full = Rect(0, 0, ed.doc.width, ed.doc.height)
+        val doc = ed.doc
+        val full = Rect(0, 0, doc.width, doc.height)
         val parts = ArrayList<com.prosketch.app.engine.HistoryEntry>()
-        parts.add(PixelEntry("변형", layer, full, s.beforeLayer, layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+        val layer = s.layer
+        val spec = textBefore
+        val newSpec = spec?.let { similarityText(s, it) }
+        if (spec != null && newSpec != null) {
+            val px = com.prosketch.app.engine.TextRenderer.render(newSpec, doc.width, doc.height)
+            Bitmaps.paste(layer.bitmap, px, 0, 0); px.recycle()
+            layer.text = newSpec
+            parts.add(com.prosketch.app.engine.TextEntry("변형", layer, spec, s.beforeLayer, newSpec, layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+        } else {
+            s.drawFloating(Canvas(layer.bitmap))
+            if (spec != null) {
+                layer.text = null
+                parts.add(com.prosketch.app.engine.TextEntry("변형", layer, spec, s.beforeLayer, null, layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+                ed.hud("텍스트가 래스터화되었습니다")
+            } else parts.add(PixelEntry("변형", layer, full, s.beforeLayer, layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+        }
+        layer.touch()
+        for (e in extras) {
+            s.drawFloating(Canvas(e.layer.bitmap), e.floating)
+            parts.add(PixelEntry("변형", e.layer, full, e.before, e.layer.bitmap.copy(Bitmap.Config.ARGB_8888, false)))
+            e.layer.touch(); e.floating.recycle()
+        }
+        extras = emptyList(); textBefore = null
         val fm = s.floatingMask
         if (fm != null && s.beforeSelection != null) {
-            val nm = SelectionOps.newMask(ed.doc.width, ed.doc.height)
+            val nm = SelectionOps.newMask(doc.width, doc.height)
             s.drawFloating(Canvas(nm), fm, Paint(Paint.FILTER_BITMAP_FLAG))
             parts.add(SelectionEntry("변형", s.beforeSelection, nm.copy(Bitmap.Config.ALPHA_8, false)))
             ed.applySelection(nm, record = false)
         }
         ed.history.push(if (parts.size == 1) parts[0] else CompoundEntry("변형", parts))
-        layer.touch()
-        if (ed.mode == com.prosketch.app.ui.editor.Mode.TRANSFORM) ed.mode = com.prosketch.app.ui.editor.Mode.PAINT
+        if (ed.mode == Mode.TRANSFORM) ed.mode = Mode.PAINT
         ed.afterCommit()
         changed()
     }
@@ -239,7 +320,9 @@ class TransformTool(private val ed: Editor) {
         session = null
         Bitmaps.paste(s.layer.bitmap, s.beforeLayer, 0, 0)
         s.layer.touch()
-        ed.mode = com.prosketch.app.ui.editor.Mode.PAINT
+        for (e in extras) { Bitmaps.paste(e.layer.bitmap, e.before, 0, 0); e.layer.touch(); e.floating.recycle() }
+        extras = emptyList(); textBefore = null
+        ed.mode = Mode.PAINT
         ed.bump()
         changed()
     }
@@ -249,6 +332,27 @@ class TransformTool(private val ed: Editor) {
     fun flipV() { session?.flip(false); changed() }
     fun rotate45() { session?.rotate(45f); changed() }
     fun reset() { session?.reset(); changed() }
+
+    /** Exact numbers from the transform toolbar (Procreate's numeric input). */
+    fun setSize(wPx: Float, hPx: Float) {
+        val s = session ?: return
+        val c = s.center()
+        val ang = s.angle()
+        s.rotate(-ang, c)
+        val cw = s.widthPx().coerceAtLeast(1f); val ch = s.heightPx().coerceAtLeast(1f)
+        val sx = wPx / cw; val sy = hPx / ch
+        for (i in 0 until 4) {
+            s.corners[i * 2] = c.x + (s.corners[i * 2] - c.x) * sx
+            s.corners[i * 2 + 1] = c.y + (s.corners[i * 2 + 1] - c.y) * sy
+        }
+        s.rotate(ang, c)
+        changed()
+    }
+
+    fun setRotation(deg: Float) { val s = session ?: return; s.rotate(deg - s.angle()); changed() }
+
+    /** Tap outside the box: nudge one step toward the tap (finer when zoomed in). */
+    fun nudge(dx: Float, dy: Float) { session?.translate(dx, dy); changed() }
 
     fun fitToScreen() {
         val s = session ?: return
@@ -290,8 +394,10 @@ class AdjustTool(private val ed: Editor) {
     fun begin(t: AdjustmentType) {
         ed.exitModes()
         val l = ed.doc.active ?: return
-        if (l.locked) { ed.hud("잠긴 레이어입니다"); return }
-        if (!l.visible) { ed.hud("숨겨진 레이어입니다"); return }
+        if (l.isGroup) { ed.hud("조정은 그룹이 아닌 레이어에 적용합니다"); return }
+        if (ed.doc.effectiveLocked(l)) { ed.hud("잠긴 레이어입니다"); return }
+        if (!ed.doc.effectiveVisible(l)) { ed.hud("숨겨진 레이어입니다"); return }
+        if (l.isText) ed.rasterizeText(l)
         layer = l
         type = t
         params.clear()

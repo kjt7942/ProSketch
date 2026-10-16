@@ -27,7 +27,7 @@ import com.prosketch.app.engine.Compositor
 import com.prosketch.app.engine.GuideType
 import com.prosketch.app.engine.InputPoint
 import com.prosketch.app.engine.LayerBlend
-import com.prosketch.app.engine.LayerGroup
+import com.prosketch.app.engine.ClipItem
 import com.prosketch.app.engine.SelectionMode
 import com.prosketch.app.engine.SymmetryType
 import com.prosketch.app.engine.TransformMode
@@ -161,25 +161,39 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
     }
     private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x66000000; setShadowLayer(18f, 0f, 4f, 0x99000000.toInt()) }
 
-    private fun signature(groups: List<LayerGroup>, includeBg: Boolean, filter: Boolean): Long {
+    private fun signature(items: List<ClipItem>, includeBg: Boolean, filter: Boolean): Long {
         var h = 1125899906842597L
         h = 31 * h + doc.width; h = 31 * h + doc.height
         if (includeBg) { h = 31 * h + doc.backgroundVersion; h = 31 * h + (if (doc.backgroundVisible) 1 else 0) + doc.backgroundColor }
         h = 31 * h + (if (filter) 1 else 0)
-        for (g in groups) for (i in g.baseIndex..g.endIndex) {
-            val l = doc.layers[i]
+        for (it in items) for (l in doc.itemLayers(it)) {
             h = 31 * h + l.id; h = 31 * h + l.version; h = 31 * h + System.identityHashCode(l.bitmap)
         }
         return h
     }
 
-    private fun record(node: RenderNode, groups: List<LayerGroup>, includeBg: Boolean, compositing: Boolean, filter: Boolean) {
+    private fun record(node: RenderNode, items: List<ClipItem>, includeBg: Boolean, compositing: Boolean, filter: Boolean) {
         node.setPosition(0, 0, doc.width, doc.height)
         node.setUseCompositingLayer(compositing, null)
         val c = node.beginRecording(doc.width, doc.height)
         if (includeBg) Compositor.drawBackground(c, doc)
-        Compositor.drawGroups(c, doc, groups, editor.renderHook, filter)
+        Compositor.drawItems(c, doc, items, editor.renderHook, filter)
         node.endRecording()
+    }
+
+    /** Documents using CPU-only blend modes are composited in software and cached until something changes. */
+    private var softCache: Bitmap? = null
+    private var softSig = Long.MIN_VALUE
+    private var softTick = 0L
+
+    private fun drawSoftware(canvas: Canvas, items: List<ClipItem>, filter: Boolean) {
+        var sig = signature(items, true, filter)
+        if (editor.liveActive) sig = 31 * sig + (++softTick)
+        if (sig != softSig || softCache == null) {
+            softCache = Compositor.flatten(doc, 1f, editor.renderHook, true)
+            softSig = sig
+        }
+        canvas.drawBitmap(softCache!!, 0f, 0f, if (filter) Paint(Paint.FILTER_BITMAP_FLAG) else null)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -200,26 +214,32 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
         val isolate = !doc.backgroundVisible
         if (isolate) canvas.saveLayer(docRect, null)
 
-        val groups = doc.groups()
-        val ag = groups.indexOfFirst { doc.activeIndex in it }.coerceAtLeast(0)
-        val simple = !canvas.isHardwareAccelerated || doc.animation.enabled || editor.soloLayer != null || groups.isEmpty()
-        if (simple) {
+        val items = doc.items()
+        val activeTop = doc.activeLayer?.let { doc.topAncestor(it) }
+        val ai = items.indexOfFirst { item -> item.layers.any { it === activeTop } }.coerceAtLeast(0)
+        val custom = items.any { doc.usesCustomBlend(it) }
+        val simple = !canvas.isHardwareAccelerated || doc.animation.enabled || editor.soloLayer != null || items.isEmpty()
+        if (doc.animation.enabled) {
+            com.prosketch.app.engine.Anim.drawEditing(canvas, doc,
+                if (editor.playing) editor.playLayer else com.prosketch.app.engine.Anim.currentFrame(doc), editor.playing, editor.renderHook)
+        } else if (custom) {
+            drawSoftware(canvas, items, filter)
+        } else if (simple) {
             Compositor.drawBackground(canvas, doc)
-            Compositor.drawGroups(canvas, doc, groups, editor.renderHook, filter)
+            Compositor.drawItems(canvas, doc, items, editor.renderHook, filter)
         } else {
-            val below = groups.subList(0, ag)
+            val below = items.subList(0, ai)
             val sigB = signature(below, true, filter)
             if (sigB != belowSig) { record(belowNode, below, true, true, filter); belowSig = sigB }
             canvas.drawRenderNode(belowNode)
-            Compositor.drawGroup(canvas, doc, groups[ag], editor.renderHook, filter)
-            val above = groups.subList(ag + 1, groups.size)
+            Compositor.drawItem(canvas, doc, items[ai], editor.renderHook, filter)
+            val above = items.subList(ai + 1, items.size)
             if (above.isNotEmpty()) {
-                val normal = above.all { doc.layers[it.baseIndex].blend == LayerBlend.NORMAL }
-                if (normal) {
+                if (above.all { Compositor.isolatable(doc, it) }) {
                     val sigA = signature(above, false, filter)
                     if (sigA != aboveSig) { record(aboveNode, above, false, true, filter); aboveSig = sigA }
                     canvas.drawRenderNode(aboveNode)
-                } else Compositor.drawGroups(canvas, doc, above, editor.renderHook, filter)
+                } else Compositor.drawItems(canvas, doc, above, editor.renderHook, filter)
             }
         }
         if (isolate) canvas.restore()

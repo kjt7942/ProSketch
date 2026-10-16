@@ -118,7 +118,6 @@ fun runExport(ed: Editor, fmt: ExportFormat, toGallery: Boolean) {
 @Composable
 fun ActionsPanel(ed: Editor, modifier: Modifier = Modifier) {
     var tab by remember { mutableIntStateOf(0) }
-    var textDialog by remember { mutableStateOf(false) }
     var cropDialog by remember { mutableStateOf(false) }
     var infoDialog by remember { mutableStateOf(false) }
     var replay by remember { mutableStateOf(false) }
@@ -138,7 +137,7 @@ fun ActionsPanel(ed: Editor, modifier: Modifier = Modifier) {
             when (tab) {
                 0 -> {
                     MenuRow("사진 삽입", Icons.Filled.Image) { ed.panel = null; photo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
-                    MenuRow("텍스트 추가", Icons.Filled.TextFields) { textDialog = true }
+                    MenuRow("텍스트 추가", Icons.Filled.TextFields) { ed.startNewText() }
                     MenuRow("잘라내기", Icons.Filled.ContentCut) { ed.cut() }
                     MenuRow("복사", Icons.Filled.ContentCopy) { ed.copy() }
                     MenuRow("모두 복사", Icons.Filled.ContentCopy) { ed.copy(all = true) }
@@ -181,7 +180,6 @@ fun ActionsPanel(ed: Editor, modifier: Modifier = Modifier) {
         }
     }
 
-    if (textDialog) TextDialog(ed) { textDialog = false }
     if (cropDialog) CropDialog(ed) { cropDialog = false }
     if (infoDialog) InfoDialog(ed) { infoDialog = false }
     if (replay) TimelapseReplay(ed) { replay = false }
@@ -307,46 +305,6 @@ private fun HelpView() {
     }
 }
 
-@Composable
-private fun TextDialog(ed: Editor, close: () -> Unit) {
-    var text by remember { mutableStateOf("") }
-    var family by remember { mutableIntStateOf(0) }
-    var bold by remember { mutableStateOf(false) }
-    var italic by remember { mutableStateOf(false) }
-    var align by remember { mutableIntStateOf(0) }
-    val maxSize = maxOf(ed.doc.width, ed.doc.height) / 4f
-    var size by remember { mutableFloatStateOf(maxOf(24f, maxOf(ed.doc.width, ed.doc.height) / 20f)) }
-    AlertDialog(
-        onDismissRequest = close,
-        title = { Text("텍스트 추가") },
-        text = {
-            Column {
-                OutlinedTextField(text, { text = it }, label = { Text("텍스트") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-                Spacer(Modifier.height(8.dp))
-                Segmented(listOf("기본", "세리프", "고정폭", "필기체"), family, Modifier.fillMaxWidth()) { family = it }
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    TextBtn("굵게", bold) { bold = !bold }
-                    TextBtn("기울임", italic) { italic = !italic }
-                    Segmented(listOf("왼쪽", "가운데", "오른쪽"), align, Modifier.width(220.dp)) { align = it }
-                }
-                LabeledSlider("크기", size, 8f..maxSize, "${size.roundToInt()}px", { size = it })
-                Text("색상: 현재 색상 · 추가 후 변형 모드로 위치를 조정합니다", color = UI.text2, fontSize = 11.sp)
-            }
-        },
-        confirmButton = {
-            TextButton({
-                val base = when (family) { 1 -> Typeface.SERIF; 2 -> Typeface.MONOSPACE; 3 -> Typeface.create("cursive", Typeface.NORMAL); else -> Typeface.DEFAULT }
-                val style = when { bold && italic -> Typeface.BOLD_ITALIC; bold -> Typeface.BOLD; italic -> Typeface.ITALIC; else -> Typeface.NORMAL }
-                val al = when (align) { 1 -> Layout.Alignment.ALIGN_CENTER; 2 -> Layout.Alignment.ALIGN_OPPOSITE; else -> Layout.Alignment.ALIGN_NORMAL }
-                ed.panel = null
-                ed.addText(text, Typeface.create(base, style), size, al)
-                close()
-            }) { Text("추가") }
-        },
-        dismissButton = { TextButton(close) { Text("취소") } },
-    )
-}
 
 @Composable
 private fun CropDialog(ed: Editor, close: () -> Unit) {

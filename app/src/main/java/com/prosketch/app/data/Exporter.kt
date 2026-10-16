@@ -26,9 +26,12 @@ enum class ExportFormat(val label: String, val ext: String, val mime: String) {
     PSD("PSD", "psd", "image/vnd.adobe.photoshop"),
     PNG("PNG", "png", "image/png"),
     JPEG("JPEG", "jpg", "image/jpeg"),
+    TIFF("TIFF", "tif", "image/tiff"),
     PDF("PDF", "pdf", "application/pdf"),
     LAYERS_PNG("PNG 레이어 (ZIP)", "zip", "application/zip"),
+    LAYERS_PDF("PDF 레이어 (페이지별)", "pdf", "application/pdf"),
     GIF("움직이는 GIF", "gif", "image/gif"),
+    APNG("움직이는 PNG", "png", "image/apng"),
     MP4("움직이는 MP4", "mp4", "video/mp4"),
     TIMELAPSE("타임랩스 MP4", "mp4", "video/mp4"),
     TIMELAPSE30("타임랩스 30초", "mp4", "video/mp4"),
@@ -75,47 +78,71 @@ object Exporter {
                 f.outputStream().use { pdf.writeTo(it) }
                 pdf.close(); b.recycle()
             }
+            ExportFormat.TIFF -> {
+                val b = Compositor.flatten(doc)
+                f.outputStream().buffered().use { Tiff.write(b, it) }
+                b.recycle()
+            }
             ExportFormat.LAYERS_PNG -> {
+                // one PNG per visible top-level layer or group (masks applied, groups composited), bottom first
+                val layers = doc.topLevel().filter { it.visible }
                 java.util.zip.ZipOutputStream(f.outputStream().buffered()).use { zip ->
-                    doc.layers.forEachIndexed { i, l ->
+                    layers.forEachIndexed { i, l ->
                         zip.putNextEntry(java.util.zip.ZipEntry(String.format("%02d_%s.png", i + 1, safeName(l.name))))
-                        l.bitmap.compress(Bitmap.CompressFormat.PNG, 100, zip)
+                        val b = Compositor.renderNode(doc, l)
+                        b.compress(Bitmap.CompressFormat.PNG, 100, zip)
+                        b.recycle()
                         zip.closeEntry()
-                        progress((i + 1f) / doc.layers.size)
+                        progress((i + 1f) / layers.size)
                     }
                 }
             }
+            ExportFormat.LAYERS_PDF -> {
+                val pdf = PdfDocument()
+                val s = min(1f, 14400f / max(doc.width, doc.height))
+                val pw = (doc.width * s).toInt(); val ph = (doc.height * s).toInt()
+                val layers = doc.topLevel().filter { it.visible }
+                layers.forEachIndexed { i, l ->
+                    val page = pdf.startPage(PdfDocument.PageInfo.Builder(pw, ph, i + 1).create())
+                    val b = Compositor.renderNode(doc, l)
+                    page.canvas.drawBitmap(b, null, android.graphics.Rect(0, 0, pw, ph), Paint(Paint.FILTER_BITMAP_FLAG))
+                    pdf.finishPage(page); b.recycle()
+                    progress((i + 1f) / layers.size)
+                }
+                f.outputStream().use { pdf.writeTo(it) }
+                pdf.close()
+            }
             ExportFormat.GIF -> exportAnimationGif(doc, f, progress)
+            ExportFormat.APNG -> exportAnimationPng(doc, f, progress)
             ExportFormat.MP4 -> exportAnimationMp4(doc, f, progress)
             ExportFormat.TIMELAPSE, ExportFormat.TIMELAPSE30 -> exportTimelapse(store, doc, f, fmt == ExportFormat.TIMELAPSE30, progress)
         }
         return f
     }
 
-    private fun frameBitmap(doc: Document, frame: Int, scale: Float): Bitmap {
-        val w = max(2, (doc.width * scale).toInt()); val h = max(2, (doc.height * scale).toInt())
-        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val c = Canvas(out)
-        c.drawColor(if (doc.backgroundVisible) doc.backgroundColor or (0xFF shl 24) else Color.WHITE)
-        c.scale(w / doc.width.toFloat(), h / doc.height.toFloat())
-        val p = Paint(Paint.FILTER_BITMAP_FLAG)
-        if (doc.animation.firstFrameBackground && frame != 0 && doc.layers.isNotEmpty()) drawFrameLayer(c, doc.layers[0], p)
-        drawFrameLayer(c, doc.layers[frame], p)
-        return out
-    }
+    private fun frameBitmap(doc: Document, frame: Layer, scale: Float, transparent: Boolean = false): Bitmap =
+        com.prosketch.app.engine.Anim.renderFrame(doc, frame, scale, transparent)
 
-    private fun drawFrameLayer(c: Canvas, l: Layer, p: Paint) {
-        p.alpha = (l.opacity * 255).toInt(); p.blendMode = l.blend.mode
-        c.drawBitmap(l.bitmap, 0f, 0f, p)
-    }
+    /** Playback order with holds and ping-pong expanded. */
+    private fun frameOrder(doc: Document): List<Layer> =
+        com.prosketch.app.engine.Anim.sequence(doc).ifEmpty { error("애니메이션 프레임이 없습니다") }
 
-    private fun frameOrder(doc: Document): List<Int> {
-        val n = doc.layers.size
-        val start = if (doc.animation.firstFrameBackground && n > 1) 1 else 0
-        val base = (start until n).toList()
-        return when (doc.animation.loop) {
-            com.prosketch.app.engine.AnimLoop.PINGPONG -> base + base.reversed().drop(1).dropLast(1)
-            else -> base
+    /** Animated PNG (APNG): full-frame PNGs repackaged as fcTL/fdAT chunks; keeps transparency. */
+    private fun exportAnimationPng(doc: Document, f: File, progress: (Float) -> Unit) {
+        val scale = min(1f, 1920f / max(doc.width, doc.height))
+        val order = frameOrder(doc)
+        // collapse holds into longer frame delays
+        val runs = ArrayList<Pair<Layer, Int>>()
+        for (l in order) if (runs.isNotEmpty() && runs.last().first === l) runs[runs.size - 1] = l to runs.last().second + 1 else runs.add(l to 1)
+        val transparent = !doc.backgroundVisible
+        f.outputStream().buffered().use { os ->
+            val apng = Apng(os, doc.animation.fps, runs.size, if (doc.animation.loop == com.prosketch.app.engine.AnimLoop.ONESHOT) 1 else 0)
+            runs.forEachIndexed { i, (l, n) ->
+                val b = frameBitmap(doc, l, scale, transparent)
+                apng.addFrame(b, n); b.recycle()
+                progress((i + 1f) / runs.size)
+            }
+            apng.finish()
         }
     }
 

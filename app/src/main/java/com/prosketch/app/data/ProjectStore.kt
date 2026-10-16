@@ -47,13 +47,15 @@ class ProjectStore(private val ctx: Context) {
         if (!mf.exists()) return@mapNotNull null
         runCatching {
             val o = JSONObject(mf.readText())
+            val layers = o.optJSONArray("layers")
+            val count = if (layers == null) 0 else (0 until layers.length()).count { !layers.getJSONObject(it).optBoolean("group") }
             ArtworkInfo(d.name, o.optString("name", "무제"), o.getInt("width"), o.getInt("height"),
-                o.optLong("modified", mf.lastModified()), o.optJSONArray("layers")?.length() ?: 0, File(d, "thumb.jpg"))
+                o.optLong("modified", mf.lastModified()), count, File(d, "thumb.jpg"))
         }.getOrNull()
     }.sortedByDescending { it.modified }
 
     fun manifestOf(doc: Document): JSONObject = JSONObject().apply {
-        put("version", 1)
+        put("version", 2)
         put("name", doc.name); put("width", doc.width); put("height", doc.height)
         put("background", doc.backgroundColor.toLong() and 0xFFFFFFFFL); put("backgroundVisible", doc.backgroundVisible)
         put("active", doc.activeIndex); put("strokes", doc.strokeCount); put("timeSpent", doc.timeSpentMs)
@@ -64,6 +66,11 @@ class ProjectStore(private val ctx: Context) {
                 put("id", l.id); put("name", l.name); put("visible", l.visible); put("opacity", l.opacity.toDouble())
                 put("blend", l.blend.name); put("alphaLock", l.alphaLock); put("clipping", l.clipping)
                 put("reference", l.isReference); put("locked", l.locked)
+                put("private", l.isPrivate); put("parent", l.parentId)
+                if (l.isGroup) { put("group", true); put("expanded", l.expanded); put("passThrough", l.passThrough) }
+                l.mask?.let { put("mask", it.id) }
+                l.text?.let { put("text", it.toJson()) }
+                if (l.holdFrames > 0) put("hold", l.holdFrames)
             })
         })
         val g = doc.guides
@@ -79,15 +86,19 @@ class ProjectStore(private val ctx: Context) {
         put("animation", JSONObject().apply {
             put("enabled", a.enabled); put("fps", a.fps); put("onion", a.onionFrames); put("onionOpacity", a.onionOpacity.toDouble())
             put("loop", a.loop.name); put("colorOnion", a.colorOnion); put("firstBg", a.firstFrameBackground)
+            put("lastFg", a.lastFrameForeground); put("blendPrimary", a.blendPrimary)
+            put("onionBefore", a.onionBefore.toLong() and 0xFFFFFFFFL); put("onionAfter", a.onionAfter.toLong() and 0xFFFFFFFFL)
         })
     }
 
     /** Main thread: copies only what changed. */
     fun snapshot(doc: Document, thumbnail: Bitmap): SaveSnapshot {
-        val dirty = doc.layers.filter { it.savedVersion != it.version || !File(dir(doc.id), "L_${it.id}.png").exists() }
+        // pixel layers and masks each have their own PNG; groups have none
+        val bitmaps = doc.layers.filter { !it.isGroup } + doc.layers.mapNotNull { it.mask }
+        val dirty = bitmaps.filter { it.savedVersion != it.version || !File(dir(doc.id), "L_${it.id}.png").exists() }
             .map { it.id to it.bitmap.copy(Bitmap.Config.ARGB_8888, false) }
-        doc.layers.forEach { it.savedVersion = it.version }
-        return SaveSnapshot(doc.id, manifestOf(doc), dirty, doc.layers.map { it.id }.toSet(), thumbnail)
+        bitmaps.forEach { it.savedVersion = it.version }
+        return SaveSnapshot(doc.id, manifestOf(doc), dirty, bitmaps.map { it.id }.toSet(), thumbnail)
     }
 
     /** Background thread. */
@@ -129,24 +140,38 @@ class ProjectStore(private val ctx: Context) {
             doc.timelapseEnabled = o.optBoolean("timelapse", true)
             val arr = o.getJSONArray("layers")
             val opts = BitmapFactory.Options().apply { inMutable = true; inPreferredConfig = Bitmap.Config.ARGB_8888; inPremultiplied = true }
-            for (i in 0 until arr.length()) {
-                val lo = arr.getJSONObject(i)
-                val lid = lo.getLong("id")
+            fun pixels(lid: Long, fill: Int = 0): Bitmap {
                 val f = File(d, "L_$lid.png")
                 var bmp = if (f.exists()) BitmapFactory.decodeFile(f.absolutePath, opts) else null
                 if (bmp == null || bmp.width != doc.width || bmp.height != doc.height || !bmp.isMutable) {
                     val nb = Bitmap.createBitmap(doc.width, doc.height, Bitmap.Config.ARGB_8888)
-                    if (bmp != null) android.graphics.Canvas(nb).drawBitmap(bmp, 0f, 0f, null)
+                    if (bmp != null) android.graphics.Canvas(nb).drawBitmap(bmp, 0f, 0f, null) else if (fill != 0) nb.eraseColor(fill)
                     bmp = nb
                 }
-                val l = Layer(bmp, lo.optString("name", "레이어"), lid)
+                return bmp
+            }
+            for (i in 0 until arr.length()) {
+                val lo = arr.getJSONObject(i)
+                val lid = lo.getLong("id")
+                val isGroup = lo.optBoolean("group")
+                val bmp = if (isGroup) Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888) else pixels(lid)
+                val l = Layer(bmp, lo.optString("name", "레이어"), lid, isGroup)
                 l.visible = lo.optBoolean("visible", true); l.opacity = lo.optDouble("opacity", 1.0).toFloat()
                 l.blend = LayerBlend.fromName(lo.optString("blend")); l.alphaLock = lo.optBoolean("alphaLock")
                 l.clipping = lo.optBoolean("clipping"); l.isReference = lo.optBoolean("reference"); l.locked = lo.optBoolean("locked")
+                l.isPrivate = lo.optBoolean("private"); l.parentId = lo.optLong("parent", 0L)
+                l.expanded = lo.optBoolean("expanded", true); l.passThrough = lo.optBoolean("passThrough", true)
+                l.holdFrames = lo.optInt("hold", 0)
+                lo.optJSONObject("text")?.let { l.text = com.prosketch.app.engine.TextSpec.fromJson(it) }
+                if (lo.has("mask")) {
+                    val mid = lo.getLong("mask")
+                    l.mask = Layer(pixels(mid, android.graphics.Color.WHITE), "마스크", mid).also { it.savedVersion = it.version }
+                }
                 l.savedVersion = l.version
                 doc.layers.add(l)
             }
-            if (doc.layers.isEmpty()) doc.layers.add(Layer.blank(doc.width, doc.height, "레이어 1"))
+            if (doc.layers.none { !it.isGroup }) doc.layers.add(Layer.blank(doc.width, doc.height, "레이어 1"))
+            doc.normalize()
             doc.activeIndex = o.optInt("active", doc.layers.size - 1).coerceIn(0, doc.layers.size - 1)
             o.optJSONObject("guides")?.let { g ->
                 val c = doc.guides
@@ -169,6 +194,8 @@ class ProjectStore(private val ctx: Context) {
                 c.onionOpacity = a.optDouble("onionOpacity", 0.45).toFloat()
                 c.loop = runCatching { AnimLoop.valueOf(a.optString("loop")) }.getOrDefault(AnimLoop.LOOP)
                 c.colorOnion = a.optBoolean("colorOnion", true); c.firstFrameBackground = a.optBoolean("firstBg")
+                c.lastFrameForeground = a.optBoolean("lastFg"); c.blendPrimary = a.optBoolean("blendPrimary")
+                c.onionBefore = a.optLong("onionBefore", 0xFFE5484DL).toInt(); c.onionAfter = a.optLong("onionAfter", 0xFF30A46CL).toInt()
             }
             doc
         }.getOrNull()

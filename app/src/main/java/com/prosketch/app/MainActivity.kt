@@ -123,6 +123,8 @@ class MainActivity : ComponentActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val ed = editor ?: return super.dispatchKeyEvent(event)
         if (event.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event)
+        // a focused text field (layer name, text tool, …) gets the key first; shortcuts only see the rest
+        if (super.dispatchKeyEvent(event)) return true
         val ctrl = event.isCtrlPressed
         val shift = event.isShiftPressed
         val handled = when (event.keyCode) {
@@ -146,6 +148,6 @@ class MainActivity : ComponentActivity() {
             KeyEvent.KEYCODE_ENTER -> if (ed.mode != Mode.PAINT) { ed.exitModes(); true } else false
             else -> false
         }
-        return handled || super.dispatchKeyEvent(event)
+        return handled
     }
 }

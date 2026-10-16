@@ -395,29 +395,27 @@ fun CopyPasteMenu(ed: Editor, modifier: Modifier = Modifier) {
 // ---------------------------------------------------------------- Animation timeline
 @Composable
 fun AnimationTimeline(ed: Editor, modifier: Modifier = Modifier) {
-    val a = ed.doc.animation
+    val doc = ed.doc
+    val a = doc.animation
     ed.version.let { }
     var settings by remember { mutableStateOf(false) }
+    var frameMenu by remember { mutableStateOf<com.prosketch.app.engine.Layer?>(null) }
     var rev by remember { mutableIntStateOf(0) }
     rev.let { }
     LaunchedEffect(ed.playing) {
         if (!ed.playing) return@LaunchedEffect
-        var dir = 1
-        val frames = ed.animationFrames()
-        if (frames.isEmpty()) { ed.playing = false; return@LaunchedEffect }
-        var k = frames.indexOf(ed.doc.activeIndex).coerceAtLeast(0)
+        var seq = com.prosketch.app.engine.Anim.sequence(doc)
+        if (seq.isEmpty()) { ed.playing = false; return@LaunchedEffect }
+        var k = seq.indexOf(com.prosketch.app.engine.Anim.currentFrame(doc)).coerceAtLeast(0)
         while (ed.playing) {
-            ed.playFrame = frames[k]
+            ed.playLayer = seq[k]
             ed.invalidate()
-            delay((1000L / a.fps.coerceIn(1, 60)))
-            val fr = ed.animationFrames()
-            if (fr.isEmpty()) break
-            when (a.loop) {
-                AnimLoop.LOOP -> k = (k + 1) % fr.size
-                AnimLoop.PINGPONG -> { if (k + dir !in fr.indices) dir = -dir; k = (k + dir).coerceIn(0, fr.size - 1) }
-                AnimLoop.ONESHOT -> { if (k + 1 >= fr.size) { ed.playing = false } else k++ }
-            }
+            delay(1000L / a.fps.coerceIn(1, 60))
+            seq = com.prosketch.app.engine.Anim.sequence(doc)
+            if (seq.isEmpty()) break
+            if (k + 1 >= seq.size) { if (a.loop == AnimLoop.ONESHOT) ed.playing = false else k = 0 } else k++
         }
+        ed.playLayer = null
         ed.invalidate()
     }
     BottomBar(modifier.fillMaxWidth()) {
@@ -426,31 +424,67 @@ fun AnimationTimeline(ed: Editor, modifier: Modifier = Modifier) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Segmented(AnimLoop.entries.map { it.label }, a.loop.ordinal, Modifier.width(220.dp)) { a.loop = AnimLoop.entries[it]; rev++; ed.bump() }
                     Box(Modifier.weight(1f)) { LabeledSlider("초당 프레임", a.fps.toFloat(), 1f..60f, "${a.fps}", { a.fps = it.roundToInt(); rev++ }, { ed.bump() }) }
-                    Box(Modifier.weight(1f)) { LabeledSlider("어니언 스킨 프레임", a.onionFrames.toFloat(), 0f..6f, "${a.onionFrames}", { a.onionFrames = it.roundToInt(); rev++; ed.invalidate() }, { ed.bump() }) }
+                    Box(Modifier.weight(1f)) { LabeledSlider("어니언 스킨 프레임", a.onionFrames.toFloat(), 0f..12f, if (a.onionFrames == 0) "없음" else "${a.onionFrames}", { a.onionFrames = it.roundToInt(); rev++; ed.invalidate() }, { ed.bump() }) }
                     Box(Modifier.weight(1f)) { LabeledSlider("어니언 스킨 불투명도", a.onionOpacity, 0f..1f, "${(a.onionOpacity * 100).roundToInt()}%", { a.onionOpacity = it; rev++; ed.invalidate() }, { ed.bump() }) }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { SwitchRow("기본 프레임 혼합", a.blendPrimary, sub = "끄면 현재 프레임이 어니언 스킨 위에 그대로 표시") { a.blendPrimary = it; rev++; ed.bump() } }
                     Box(Modifier.weight(1f)) { SwitchRow("어니언 스킨 색상", a.colorOnion) { a.colorOnion = it; rev++; ed.bump() } }
-                    Box(Modifier.weight(1f)) { SwitchRow("첫 프레임을 배경으로", a.firstFrameBackground) { a.firstFrameBackground = it; rev++; ed.bump() } }
+                    Text("이전", color = UI.text2, fontSize = 12.sp)
+                    Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(Color(a.onionBefore)).border(1.dp, Color.White, RoundedCornerShape(6.dp))
+                        .combinedClickableC { a.onionBefore = ed.color; rev++; ed.bump(); ed.hud("이전 프레임 색상: 현재 색상") })
+                    Text("다음", color = UI.text2, fontSize = 12.sp)
+                    Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(Color(a.onionAfter)).border(1.dp, Color.White, RoundedCornerShape(6.dp))
+                        .combinedClickableC { a.onionAfter = ed.color; rev++; ed.bump(); ed.hud("다음 프레임 색상: 현재 색상") })
+                }
+            }
+            frameMenu?.takeIf { it in doc.layers }?.let { f ->
+                val frames = doc.topLevel()
+                val first = frames.firstOrNull() === f; val last = frames.lastOrNull() === f
+                Row(Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(RoundedCornerShape(10.dp)).background(UI.panel2).padding(horizontal = 10.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(f.name, color = UI.text, fontSize = 13.sp, modifier = Modifier.width(110.dp), maxLines = 1)
+                    Box(Modifier.weight(1f)) {
+                        LabeledSlider("유지 시간", f.holdFrames.toFloat(), 0f..120f, if (f.holdFrames == 0) "없음" else "${f.holdFrames}프레임",
+                            { f.holdFrames = it.roundToInt(); rev++; ed.invalidate() }, { ed.setHold(f, f.holdFrames) })
+                    }
+                    TextBtn("복제") { ed.duplicateLayer(doc.indexOf(f)); frameMenu = null }
+                    TextBtn("삭제") { ed.deleteLayer(doc.indexOf(f)); frameMenu = null }
+                    if (first) TextBtn("배경", a.firstFrameBackground) { a.firstFrameBackground = !a.firstFrameBackground; rev++; ed.bump() }
+                    if (last) TextBtn("전경", a.lastFrameForeground) { a.lastFrameForeground = !a.lastFrameForeground; rev++; ed.bump() }
+                    Icon(Icons.Filled.Close, "닫기", tint = UI.text2, modifier = Modifier.size(22.dp).combinedClickableC { frameMenu = null })
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 com.prosketch.app.ui.common.IconBtn(Icons.Filled.Settings, "설정", selected = settings) { settings = !settings }
                 com.prosketch.app.ui.common.IconBtn(if (ed.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, "재생") { ed.playing = !ed.playing }
-                com.prosketch.app.ui.common.IconBtn(Icons.Filled.Add, "프레임 추가") { ed.playing = false; ed.addLayer(label = "프레임 추가") }
+                com.prosketch.app.ui.common.IconBtn(Icons.Filled.Add, "프레임 추가") { ed.playing = false; ed.addFrame() }
                 Spacer(Modifier.width(8.dp))
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ed.doc.layers.forEachIndexed { i, l ->
-                        val cur = if (ed.playing) ed.playFrame == i else ed.doc.activeIndex == i
-                        val thumb = l.thumbnail(120)
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val frames = doc.topLevel()
+                    val current = if (ed.playing) ed.playLayer else com.prosketch.app.engine.Anim.currentFrame(doc)
+                    val bg = com.prosketch.app.engine.Anim.background(doc); val fg = com.prosketch.app.engine.Anim.foreground(doc)
+                    frames.forEach { f ->
+                        val cur = current === f
+                        val thumb = ed.frameThumb(f)
                         Box(Modifier.size(width = 72.dp, height = 50.dp).clip(RoundedCornerShape(6.dp)).checkerboard(4.dp)
                             .border(if (cur) 2.5.dp else 1.dp, if (cur) UI.accent else Color(0x44FFFFFF), RoundedCornerShape(6.dp))
-                            .combinedClickableC { ed.playing = false; ed.selectLayer(i) }) {
+                            .combinedClickableC {
+                                ed.playing = false
+                                if (cur) frameMenu = if (frameMenu === f) null else f
+                                else { ed.selectLayer(doc.indexOf(f)); frameMenu = null }
+                            }) {
                             Image(thumb.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-                            if (a.firstFrameBackground && i == 0) Text("배경", color = Color.White, fontSize = 9.sp, modifier = Modifier.align(Alignment.BottomStart).background(Color(0x99000000)).padding(2.dp))
+                            val tag = when { f === bg -> "배경"; f === fg -> "전경"; f.isGroup -> "그룹"; else -> null }
+                            if (tag != null) Text(tag, color = Color.White, fontSize = 9.sp, modifier = Modifier.align(Alignment.BottomStart).background(Color(0x99000000)).padding(2.dp))
                         }
+                        // held beats are shown as greyed slivers after the frame
+                        val shown = f.holdFrames.coerceAtMost(8)
+                        repeat(shown) { Box(Modifier.size(width = 10.dp, height = 44.dp).clip(RoundedCornerShape(3.dp)).background(Color(0x55FFFFFF))) }
+                        if (f.holdFrames > 8) Text("+${f.holdFrames - 8}", color = UI.text2, fontSize = 10.sp)
                     }
                 }
+                Text("${com.prosketch.app.engine.Anim.totalFrames(doc)}프레임 · ${a.fps}fps", color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp))
             }
         }
     }

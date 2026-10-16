@@ -77,6 +77,7 @@ fun EditorScreen(ed: Editor, onCanvasView: (CanvasView) -> Unit, onExit: () -> U
 
     BackHandler {
         when {
+            ed.textEditing != null -> ed.endTextEdit(true)
             ed.panel != null -> ed.panel = null
             ed.mode != Mode.PAINT -> ed.exitModes()
             ed.fullscreen -> ed.fullscreen = false
@@ -115,6 +116,7 @@ fun EditorScreen(ed: Editor, onCanvasView: (CanvasView) -> Unit, onExit: () -> U
         }
 
         if (ed.copyPasteMenu) CopyPasteMenu(ed, Modifier.align(Alignment.TopCenter).padding(top = 64.dp))
+        ed.textEditing?.let { tl -> TextPanel(ed, tl, Modifier.align(Alignment.TopStart).padding(top = 56.dp, start = 64.dp).width(460.dp)) }
         if (ed.referenceVisible) ReferenceWindow(ed)
 
         // panels + scrim

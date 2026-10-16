@@ -15,7 +15,7 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 
 enum class TransformMode(val label: String) { FREEFORM("자유형태"), UNIFORM("균등"), DISTORT("왜곡"), WARP("뒤틀기") }
-enum class Interpolation(val label: String) { NEAREST("최단입점"), BILINEAR("쌍선형"), BICUBIC("쌍입방") }
+enum class Interpolation(val label: String) { NEAREST("최근접 이웃"), BILINEAR("쌍선형"), BICUBIC("쌍입방") }
 
 /**
  * Floating content being transformed. The quad corners (TL, TR, BR, BL) are the single source of truth

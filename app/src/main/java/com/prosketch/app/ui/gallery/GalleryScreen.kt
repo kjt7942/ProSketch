@@ -99,7 +99,8 @@ fun createDocument(store: ProjectStore, w: Int, h: Int, name: String, transparen
     doc.name = name
     doc.backgroundVisible = !transparent
     if (layers.isNullOrEmpty()) doc.layers.add(Layer.blank(w, h, "레이어 1")) else doc.layers.addAll(layers)
-    doc.activeIndex = doc.layers.size - 1
+    doc.normalize()
+    doc.activeIndex = doc.layers.indexOfLast { !it.isGroup }.coerceAtLeast(0)
     val thumb = Compositor.flatten(doc, min(1f, 640f / max(w, h)))
     store.write(store.snapshot(doc, thumb))
     thumb.recycle()
