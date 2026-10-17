@@ -849,3 +849,4 @@ ProSketch 파일이 아닙니다	Not a ProSketch file
 지원하지 않는 팔레트 형식입니다 (.swatches, .ase, .aco)	Unsupported palette format (.swatches, .ase, .aco)
 Swatches.json이 없습니다	Swatches.json is missing
 팔레트	Palette
+{0}px · 슬라이더 100%: {1}px	{0}px · slider 100%: {1}px

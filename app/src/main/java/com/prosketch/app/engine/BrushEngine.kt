@@ -563,7 +563,7 @@ class SmudgeStroke(
 
     private fun dab(p: InputPoint) {
         val size = sizeAt(p)
-        val n = (size.toInt() or 1).coerceIn(3, 512)
+        val n = (size.toInt() or 1).coerceIn(3, 767)
         val pr = if (stylus) p.pressure else 1f
         val str = (strength * (0.35f + 0.65f * pr)).coerceIn(0f, 1f)
         val left = (p.x - n / 2f).toInt(); val top = (p.y - n / 2f).toInt()

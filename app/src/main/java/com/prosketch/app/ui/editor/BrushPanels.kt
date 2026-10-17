@@ -270,7 +270,9 @@ private val sections: List<Pair<String, List<P>>> = listOf(
         P(L.t("기울기 시작 각도"), { it.tiltAngleDeg }, { b, v -> b.tiltAngleDeg = v }, 0f..85f) { "${it.roundToInt()}°" },
     ),
     L.t("속성") to listOf(
-        P(L.t("최대 크기"), { it.sizeMax }, { b, v -> b.sizeMax = v.coerceAtLeast(b.sizeMin + 1) }, 2f..1000f) { "${it.roundToInt()}px" },
+        P(L.t("최대 크기"), { it.sizeMax }, { b, v -> b.sizeMax = v.coerceAtLeast(b.sizeMin + 1) }, 2f..1000f) {
+            L.tf("{0}px · 슬라이더 100%: {1}px", it.roundToInt(), maxOf(it * 3f, 150f).coerceAtMost(maxOf(it, 1500f)).roundToInt())
+        },
         P(L.t("최소 크기"), { it.sizeMin }, { b, v -> b.sizeMin = v.coerceAtMost(b.sizeMax - 1) }, 0.5f..200f) { "${"%.1f".format(it)}px" },
         pct(L.t("최대 불투명도"), { it.opacityMax }, { b, v -> b.opacityMax = v }),
         pct(L.t("최소 불투명도"), { it.opacityMin }, { b, v -> b.opacityMin = v }),

@@ -3,6 +3,9 @@ package com.prosketch.app.engine
 import com.prosketch.app.L
 
 import org.json.JSONObject
+import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.pow
 
 enum class TipShape(val label: String) {
     ROUND(L.t("원형")), PENCIL(L.t("연필")), CHARCOAL(L.t("목탄")), BRISTLE(L.t("강모")), FLAT(L.t("평붓")),
@@ -110,10 +113,21 @@ data class Brush(
     var defaultOpacity: Float = 1f,
     var smudgePull: Float = 0.8f,
 ) {
+    /**
+     * Slider 0..1 → diameter. The top of the slider reaches [sizeLimit] (well past [sizeMax]); the curve
+     * exponent is chosen so 40% gives the same size as the old s^1.5 curve up to [sizeMax], keeping
+     * everyday sizes where they were while adding fine control at the bottom and big sizes at the top.
+     */
     fun sizeFor(slider: Float): Float {
         val s = slider.coerceIn(0f, 1f)
-        return sizeMin + (sizeMax - sizeMin) * s * kotlin.math.sqrt(s)
+        val top = sizeLimit
+        val span = (sizeMax - sizeMin).coerceAtLeast(0.01f)
+        val q = (ln(0.2530f * span / (top - sizeMin).coerceAtLeast(span)) / ln(0.4f)).coerceIn(1.5f, 4.5f)
+        return sizeMin + (top - sizeMin) * s.pow(q)
     }
+
+    /** Diameter at 100% on the size slider. */
+    val sizeLimit: Float get() = max(sizeMax * 3f, 150f).coerceAtMost(max(sizeMax, 1500f))
 
     fun opacityFor(slider: Float): Float = opacityMin + (opacityMax - opacityMin) * slider.coerceIn(0f, 1f)
 
