@@ -29,6 +29,7 @@ import com.prosketch.app.engine.Compositor
 import com.prosketch.app.engine.CurveSet
 import com.prosketch.app.engine.Filters
 import com.prosketch.app.engine.FloodFill
+import com.prosketch.app.engine.GradientPreset
 import com.prosketch.app.engine.GradientPresets
 import com.prosketch.app.engine.Layer
 import com.prosketch.app.engine.LiquifyMode
@@ -49,6 +50,8 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import kotlin.math.min
 import kotlin.math.sin
 
@@ -408,6 +411,17 @@ class AdjustTool(private val ed: Editor) {
     private var selBytes: ByteArray? = null
     private var job: Job? = null
     private var pending = false
+    // Progressive preview: a quick low-resolution result while values change, full resolution once they settle.
+    private var lowSrc: IntArray? = null
+    private var lowSel: ByteArray? = null
+    private var lowW = 0
+    private var lowH = 0
+    private var lowPreview: Bitmap? = null
+    private var gen = 0                 // bumped on every parameter change
+    private var fullGen = -1            // generation shown in [preview] at full resolution
+    private var fullJob: Job? = null
+    private var fullToken: Filters.CancelToken? = null
+    private val previewFull get() = fullGen == gen
     var liquify: LiquifySession? = null
         private set
     private val dstIn = Paint(Paint.FILTER_BITMAP_FLAG).apply { blendMode = BlendMode.DST_IN }
@@ -448,6 +462,7 @@ class AdjustTool(private val ed: Editor) {
                 src = IntArray(w * h).also { l.bitmap.getPixels(it, 0, w, 0, 0, w, h) }
                 srcBitmap = l.bitmap.copy(Bitmap.Config.ARGB_8888, false)
                 preview = l.bitmap.copy(Bitmap.Config.ARGB_8888, true)
+                prepareLowRes(l.bitmap, w, h)
                 pencilMask = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                 ed.mode = Mode.ADJUST
                 if (t == AdjustmentType.RECOLOR) ed.hud(L.t("십자선을 바꿀 색 위로 옮기세요 · 현재 색상으로 칠해집니다"))
@@ -538,29 +553,93 @@ class AdjustTool(private val ed: Editor) {
         recompute()
     }
 
+    /** Longest side of the quick preview. Filter sizes are relative to the canvas, so it looks the same. */
+    private val lowSide = 720
+
+    private fun prepareLowRes(bmp: Bitmap, w: Int, h: Int) {
+        val k = lowSide.toFloat() / max(w, h)
+        if (k >= 0.75f) { lowSrc = null; lowSel = null; lowPreview = null; return }   // small canvas: full resolution is quick
+        lowW = max(1, (w * k).roundToInt()); lowH = max(1, (h * k).roundToInt())
+        val small = Bitmap.createScaledBitmap(bmp, lowW, lowH, true)
+        lowSrc = IntArray(lowW * lowH).also { small.getPixels(it, 0, lowW, 0, 0, lowW, lowH) }
+        if (small !== bmp) small.recycle()
+        lowSel = ed.selection?.let { sel ->
+            val ss = Bitmap.createScaledBitmap(sel, lowW, lowH, true)
+            SelectionOps.toBytes(ss).also { if (ss !== sel) ss.recycle() }
+        }
+        lowPreview = Bitmap.createBitmap(lowW, lowH, Bitmap.Config.ARGB_8888)
+    }
+
+    private class Snapshot(
+        val t: AdjustmentType, val p: Map<String, Float>, val cs: CurveSet, val bal: ColorBalanceSet,
+        val grad: GradientPreset, val color: Int,
+    )
+
+    private fun snapshot() = Snapshot(type!!, HashMap(params), curves.copy(), balance.copy(),
+        GradientPresets.all.getOrElse(gradientIndex) { GradientPresets.all[0] }, ed.color)
+
+    private fun runFilter(s: Snapshot, src: IntArray, w: Int, h: Int, sel: ByteArray?): IntArray =
+        Filters.apply(s.t, src, w, h, s.p, s.cs, s.bal, s.grad, s.color).also { Filters.maskBlend(src, it, sel) }
+
     private fun recompute() {
         val t = type ?: return
         if (t == AdjustmentType.LIQUIFY || t == AdjustmentType.CLONE) return
+        gen++
+        // a full-resolution pass for older values is now useless
+        fullToken?.cancelled = true; fullJob?.cancel(); fullJob = null
+        computing = true
+        quickPass()
+    }
+
+    /** Low-resolution pass for the latest values; serialised so a burst of changes runs it at most twice. */
+    private fun quickPass() {
+        val low = lowSrc
+        if (low == null) { scheduleFull(0L); return }
         if (job?.isActive == true) { pending = true; return }
         pending = false
-        val s = src ?: return
-        val w = ed.doc.width; val h = ed.doc.height
-        val p = HashMap(params)
-        val cs = curves.copy(); val bal = balance.copy()
-        val grad = GradientPresets.all.getOrElse(gradientIndex) { GradientPresets.all[0] }
-        val sel = selBytes
-        val color = ed.color
-        computing = true
+        val snap = snapshot()
+        val myGen = gen
+        val lw = lowW; val lh = lowH; val sel = lowSel
         job = ed.scope.launch(Dispatchers.Default) {
-            val out = Filters.apply(t, s, w, h, p, cs, bal, grad, color)
-            Filters.maskBlend(s, out, sel)
+            val out = runCatching { runFilter(snap, low, lw, lh, sel) }.getOrNull()
             withContext(Dispatchers.Main) {
-                preview?.setPixels(out, 0, w, 0, 0, w, h)
-                computing = false
-                ed.invalidate()
-                if (pending) recompute()
+                if (type == null) return@withContext
+                if (out != null) { lowPreview?.setPixels(out, 0, lw, 0, 0, lw, lh); ed.invalidate() }
+                if (pending) quickPass() else if (myGen == gen) scheduleFull(220L)
             }
         }
+    }
+
+    /** Computes the full-resolution result after [delayMs] unless the values change again. */
+    private fun scheduleFull(delayMs: Long) {
+        val s = src ?: return
+        val w = ed.doc.width; val h = ed.doc.height
+        val snap = snapshot()
+        val myGen = gen
+        val sel = selBytes
+        val tok = Filters.CancelToken()
+        fullToken?.cancelled = true
+        fullToken = tok
+        fullJob = ed.scope.launch(Dispatchers.Default) {
+            if (delayMs > 0) delay(delayMs)
+            if (tok.cancelled) return@launch
+            val out = runCatching { Filters.cancellable(tok) { runFilter(snap, s, w, h, sel) } }.getOrNull() ?: return@launch
+            withContext(Dispatchers.Main) {
+                if (tok.cancelled || myGen != gen || type == null) return@withContext
+                preview?.setPixels(out, 0, w, 0, 0, w, h)
+                fullGen = myGen
+                computing = false
+                ed.invalidate()
+            }
+        }
+    }
+
+    /** The filtered layer: full resolution when ready, otherwise the quick preview stretched to the canvas. */
+    private fun drawFiltered(c: Canvas, paint: Paint?) {
+        val lp = lowPreview
+        if (previewFull || lp == null) { preview?.let { c.drawBitmap(it, 0f, 0f, paint) }; return }
+        val p = Paint(paint ?: Paint()).apply { isFilterBitmap = true }
+        c.drawBitmap(lp, null, RectF(0f, 0f, ed.doc.width.toFloat(), ed.doc.height.toFloat()), p)
     }
 
     // ---- brush strokes in Pencil mode and Clone
@@ -639,14 +718,14 @@ class AdjustTool(private val ed: Editor) {
 
     /** Original × (1 − mask) + filtered × mask, exact in premultiplied space. */
     private fun drawPencilComposite(c: Canvas) {
-        val sb = srcBitmap ?: return; val pv = preview ?: return; val m = pencilMask ?: return
+        val sb = srcBitmap ?: return; if (preview == null) return; val m = pencilMask ?: return
         val bounds = RectF(0f, 0f, ed.doc.width.toFloat(), ed.doc.height.toFloat())
         val s = stroke
         c.saveLayer(bounds, null)
         c.drawBitmap(sb, 0f, 0f, null)
         c.saveLayer(bounds, dstOut); c.drawBitmap(m, 0f, 0f, null); if (s != null && !strokeErase) drawStrokeMask(c, s); c.restore()
         c.saveLayer(bounds, plus)
-        c.drawBitmap(pv, 0f, 0f, null)
+        drawFiltered(c, null)
         c.saveLayer(bounds, dstIn)
         c.drawBitmap(m, 0f, 0f, null)
         if (s != null) { if (strokeErase) { c.saveLayer(null, dstOut); drawStrokeMask(c, s); c.restore() } else drawStrokeMask(c, s) }
@@ -669,8 +748,8 @@ class AdjustTool(private val ed: Editor) {
             return true
         }
         if (pencil) { canvas.saveLayer(bounds, paint); drawPencilComposite(canvas); canvas.restore(); return true }
-        val pv = preview ?: return false
-        canvas.drawBitmap(pv, 0f, 0f, paint)
+        if (preview == null) return false
+        drawFiltered(canvas, paint)
         return true
     }
 
@@ -709,7 +788,7 @@ class AdjustTool(private val ed: Editor) {
             else -> {
                 // make sure the preview reflects the latest parameters
                 // the async job finishes on the main thread, so never block on it here: recompute synchronously instead
-                if (job?.isActive == true || pending) { job?.cancel(); finalizeSync() }
+                if (!previewFull) finalizeSync()
                 val pv = preview ?: return
                 val before = l.bitmap.copy(Bitmap.Config.ARGB_8888, false)
                 if (pencil) {
@@ -725,19 +804,22 @@ class AdjustTool(private val ed: Editor) {
     }
 
     private fun finalizeSync() {
-        val t = type ?: return
+        if (type == null) return
         val s = src ?: return
         val w = ed.doc.width; val h = ed.doc.height
-        val out = Filters.apply(t, s, w, h, HashMap(params), curves.copy(), balance.copy(), GradientPresets.all.getOrElse(gradientIndex) { GradientPresets.all[0] }, ed.color)
-        Filters.maskBlend(s, out, selBytes)
+        // stop background passes first so the final one gets every core
+        fullToken?.cancelled = true; fullJob?.cancel(); job?.cancel(); pending = false
+        val out = runFilter(snapshot(), s, w, h, selBytes)
         preview?.setPixels(out, 0, w, 0, 0, w, h)
-        pending = false
+        fullGen = gen
     }
 
     fun cancel() { end(); ed.invalidate() }
 
     private fun end() {
         job?.cancel(); job = null; pending = false
+        fullToken?.cancelled = true; fullJob?.cancel(); fullJob = null; fullToken = null
+        lowSrc = null; lowSel = null; lowPreview = null; fullGen = -1
         stroke = null; ed.strokeBuffer.clear()
         preview?.recycle(); preview = null
         pencilMask?.recycle(); pencilMask = null

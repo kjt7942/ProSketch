@@ -189,16 +189,29 @@ object Filters {
     private val threads = max(2, Runtime.getRuntime().availableProcessors())
     private val pool = Executors.newFixedThreadPool(threads) { r -> Thread(r, "filters").apply { isDaemon = true; priority = Thread.NORM_PRIORITY - 1 } }
 
-    fun parallelRows(h: Int, block: (Int, Int) -> Unit) {
-        val chunk = max(16, (h + threads - 1) / threads)
+    /** Lets a running filter be abandoned: checked between row chunks. */
+    class CancelToken { @Volatile var cancelled = false }
+    private val token = ThreadLocal<CancelToken?>()
+
+    /** Runs [block] so that cancelling [t] aborts it with a CancellationException. */
+    fun <T> cancellable(t: CancelToken, block: () -> T): T {
+        token.set(t)
+        try { return block() } finally { token.remove() }
+    }
+
+    fun parallelRows(h: Int, minChunk: Int = 16, block: (Int, Int) -> Unit) {
+        val tok = token.get()
+        if (tok?.cancelled == true) throw java.util.concurrent.CancellationException()
+        val chunk = max(minChunk, (h + threads * 4 - 1) / (threads * 4))
         val tasks = ArrayList<Callable<Unit>>()
         var y = 0
         while (y < h) {
             val y0 = y; val y1 = min(h, y + chunk)
-            tasks.add(Callable { block(y0, y1) })
+            tasks.add(Callable { if (tok?.cancelled != true) block(y0, y1) })
             y = y1
         }
         pool.invokeAll(tasks).forEach { it.get() }
+        if (tok?.cancelled == true) throw java.util.concurrent.CancellationException()
     }
 
     inline fun a(c: Int) = c ushr 24
@@ -359,22 +372,53 @@ object Filters {
 
     // ---------- blur core (premultiplied, 3-pass box ≈ gaussian) ----------
 
+    /** Runs [block] over 0 until [n] in parallel slices. */
+    private inline fun parallelRange(n: Int, crossinline block: (Int, Int) -> Unit) {
+        val slice = 4096
+        parallelRows((n + slice - 1) / slice) { r0, r1 -> block(r0 * slice, min(n, r1 * slice)) }
+    }
+
+    /** Premultiplied, packed ARGB: one memory read per tap for the many-tap blurs. */
+    private fun premulPacked(src: IntArray): IntArray {
+        val pm = IntArray(src.size)
+        parallelRange(src.size) { i0, i1 ->
+            for (i in i0 until i1) {
+                val c = src[i]; val al = a(c)
+                pm[i] = if (al == 255) c else if (al == 0) 0 else
+                    (al shl 24) or ((r(c) * al + 127) / 255 shl 16) or ((g(c) * al + 127) / 255 shl 8) or ((b(c) * al + 127) / 255)
+            }
+        }
+        return pm
+    }
+
+    /** Averages of premultiplied sums back to straight ARGB. */
+    private fun unpremul(sa: Int, sr: Int, sg: Int, sb: Int, n: Int): Int {
+        val al = (sa + n / 2) / n
+        if (al <= 0) return 0
+        val d = sa.toFloat() / 255f   // = n · alpha
+        return argb(al, (sr / d + 0.5f).toInt(), (sg / d + 0.5f).toInt(), (sb / d + 0.5f).toInt())
+    }
+
     private fun toPremulPlanes(src: IntArray): Array<FloatArray> {
         val n = src.size
         val pa = FloatArray(n); val pr = FloatArray(n); val pg = FloatArray(n); val pb = FloatArray(n)
-        for (i in 0 until n) {
-            val c = src[i]; val al = a(c) / 255f
-            pa[i] = al; pr[i] = r(c) * al; pg[i] = g(c) * al; pb[i] = b(c) * al
+        parallelRange(n) { i0, i1 ->
+            for (i in i0 until i1) {
+                val c = src[i]; val al = a(c) / 255f
+                pa[i] = al; pr[i] = r(c) * al; pg[i] = g(c) * al; pb[i] = b(c) * al
+            }
         }
         return arrayOf(pa, pr, pg, pb)
     }
 
     private fun fromPremulPlanes(pl: Array<FloatArray>, out: IntArray) {
         val (pa, pr, pg, pb) = pl
-        for (i in out.indices) {
-            val al = pa[i]
-            if (al <= 1f / 512f) { out[i] = 0; continue }
-            out[i] = argb((al * 255f + 0.5f).toInt(), (pr[i] / al + 0.5f).toInt(), (pg[i] / al + 0.5f).toInt(), (pb[i] / al + 0.5f).toInt())
+        parallelRange(out.size) { i0, i1 ->
+            for (i in i0 until i1) {
+                val al = pa[i]
+                if (al <= 1f / 512f) { out[i] = 0; continue }
+                out[i] = argb((al * 255f + 0.5f).toInt(), (pr[i] / al + 0.5f).toInt(), (pg[i] / al + 0.5f).toInt(), (pb[i] / al + 0.5f).toInt())
+            }
         }
     }
 
@@ -392,24 +436,28 @@ object Filters {
     }
 
     private fun boxV(src: FloatArray, dst: FloatArray, w: Int, h: Int, r: Int) {
-        // process in column bands for parallelism
-        val bands = threads
+        // Column bands, walked row by row so memory is read sequentially (a column walk thrashes the cache).
+        val bands = threads * 2
         val band = (w + bands - 1) / bands
-        val tasks = (0 until bands).map { bI ->
-            Callable {
+        val inv = 1f / (2 * r + 1)
+        parallelRows(bands, minChunk = 1) { b0, b1 ->
+            for (bI in b0 until b1) {
                 val x0 = bI * band; val x1 = min(w, x0 + band)
-                val inv = 1f / (2 * r + 1)
-                for (x in x0 until x1) {
-                    var acc = 0f
-                    for (k in -r..r) acc += src[k.coerceIn(0, h - 1) * w + x]
-                    for (y in 0 until h) {
-                        dst[y * w + x] = acc * inv
-                        acc += src[(y + r + 1).coerceAtMost(h - 1) * w + x] - src[(y - r).coerceAtLeast(0) * w + x]
+                if (x0 >= x1) continue
+                val bw = x1 - x0
+                val acc = FloatArray(bw)
+                for (k in -r..r) { val o = k.coerceIn(0, h - 1) * w + x0; for (j in 0 until bw) acc[j] += src[o + j] }
+                for (y in 0 until h) {
+                    val o = y * w + x0
+                    val add = (y + r + 1).coerceAtMost(h - 1) * w + x0
+                    val sub = (y - r).coerceAtLeast(0) * w + x0
+                    for (j in 0 until bw) {
+                        dst[o + j] = acc[j] * inv
+                        acc[j] += src[add + j] - src[sub + j]
                     }
                 }
             }
         }
-        pool.invokeAll(tasks).forEach { it.get() }
     }
 
     fun blurPlanes(pl: Array<FloatArray>, w: Int, h: Int, sigma: Float) {
@@ -441,7 +489,7 @@ object Filters {
 
     private fun motionBlur(src: IntArray, out: IntArray, w: Int, h: Int, dist: Float, angleDeg: Float) {
         if (dist < 1f) { src.copyInto(out); return }
-        val pl = toPremulPlanes(src)
+        val pm = premulPacked(src)
         val taps = dist.toInt().coerceIn(3, 48)
         val dx = cos(Math.toRadians(angleDeg.toDouble())).toFloat()
         val dy = sin(Math.toRadians(angleDeg.toDouble())).toFloat()
@@ -450,20 +498,19 @@ object Filters {
             val f = (t / (taps - 1f) - 0.5f) * dist
             offs[t * 2] = (dx * f).roundToInt(); offs[t * 2 + 1] = (dy * f).roundToInt()
         }
-        val res = Array(4) { FloatArray(w * h) }
+        val wMax = w - 1; val hMax = h - 1
         parallelRows(h) { y0, y1 ->
             for (y in y0 until y1) for (x in 0 until w) {
-                var sa = 0f; var sr = 0f; var sg = 0f; var sb = 0f
+                var sa = 0; var sr = 0; var sg = 0; var sb = 0
                 for (t in 0 until taps) {
-                    val xx = (x + offs[t * 2]).coerceIn(0, w - 1); val yy = (y + offs[t * 2 + 1]).coerceIn(0, h - 1)
-                    val j = yy * w + xx
-                    sa += pl[0][j]; sr += pl[1][j]; sg += pl[2][j]; sb += pl[3][j]
+                    var xx = x + offs[t * 2]; if (xx < 0) xx = 0 else if (xx > wMax) xx = wMax
+                    var yy = y + offs[t * 2 + 1]; if (yy < 0) yy = 0 else if (yy > hMax) yy = hMax
+                    val c = pm[yy * w + xx]
+                    sa += c ushr 24; sr += (c shr 16) and 0xFF; sg += (c shr 8) and 0xFF; sb += c and 0xFF
                 }
-                val i = y * w + x
-                res[0][i] = sa / taps; res[1][i] = sr / taps; res[2][i] = sg / taps; res[3][i] = sb / taps
+                out[y * w + x] = unpremul(sa, sr, sg, sb, taps)
             }
         }
-        fromPremulPlanes(res, out)
     }
 
     private fun sharpen(src: IntArray, out: IntArray, w: Int, h: Int, amount: Float, radius: Float) {
@@ -513,15 +560,38 @@ object Filters {
     }
 
     private fun noise(src: IntArray, out: IntArray, w: Int, h: Int, amount: Float, style: Int, cell: Float, octaves: Int, turbulence: Float, multi: Boolean, additive: Boolean) =
-        parallelRows(h) { y0, y1 ->
+        run {
+            // The field is smooth below its finest octave, so sample it on a grid at half that detail and interpolate.
+            val step = max(1, (cell / (1 shl octaves) / 2f).toInt())
+            val gw = w / step + 2; val gh = h / step + 2
             val inv = 1f / cell
+            val seeds = if (multi) intArrayOf(11, 23, 37) else intArrayOf(11)
+            val grids = Array(seeds.size) { FloatArray(gw * gh) }
+            parallelRows(gh, minChunk = 1) { g0, g1 ->
+                for (gy in g0 until g1) for (gx in 0 until gw) for (k in seeds.indices)
+                    grids[k][gy * gw + gx] = fractal(gx * step * inv, gy * step * inv, seeds[k], style, octaves, turbulence)
+            }
+            fun field(k: Int, x: Int, y: Int): Float {
+                if (step == 1) return grids[k][y * gw + x]
+                val gx = x / step; val gy = y / step
+                val tx = (x - gx * step).toFloat() / step; val ty = (y - gy * step).toFloat() / step
+                val g = grids[k]; val o = gy * gw + gx
+                val top = g[o] + (g[o + 1] - g[o]) * tx
+                val bot = g[o + gw] + (g[o + gw + 1] - g[o + gw]) * tx
+                return top + (bot - top) * ty
+            }
+            noiseApply(src, out, w, h, amount, additive, multi) { k, x, y -> field(k, x, y) }
+        }
+
+    private inline fun noiseApply(src: IntArray, out: IntArray, w: Int, h: Int, amount: Float, additive: Boolean, multi: Boolean,
+                                  crossinline field: (Int, Int, Int) -> Float) =
+        parallelRows(h) { y0, y1 ->
             for (y in y0 until y1) for (x in 0 until w) {
                 val i = y * w + x
                 val c = src[i]
-                val fx = x * inv; val fy = y * inv
-                val nr = fractal(fx, fy, 11, style, octaves, turbulence)
-                val ng = if (multi) fractal(fx, fy, 23, style, octaves, turbulence) else nr
-                val nb = if (multi) fractal(fx, fy, 37, style, octaves, turbulence) else nr
+                val nr = field(0, x, y)
+                val ng = if (multi) field(1, x, y) else nr
+                val nb = if (multi) field(2, x, y) else nr
                 if (additive) {
                     if (a(c) == 0) { out[i] = c; continue }
                     val k = amount * 255f
@@ -719,31 +789,32 @@ object Filters {
     /** Positional = zoom blur towards the focal point; directional = streaks growing along [angleDeg] on one side. */
     private fun perspectiveBlur(src: IntArray, out: IntArray, w: Int, h: Int, amount: Float, directional: Boolean, fx: Float, fy: Float, angleDeg: Float) {
         if (amount <= 0f) { src.copyInto(out); return }
-        val pl = toPremulPlanes(src)
-        val res = Array(4) { FloatArray(w * h) }
+        val pm = premulPacked(src)
         val taps = 20
         val ux = cos(Math.toRadians(angleDeg.toDouble())).toFloat(); val uy = sin(Math.toRadians(angleDeg.toDouble())).toFloat()
         val k = amount * 0.35f
+        val off = if (directional) 0.5f else 0f
+        val wMax = w - 1; val hMax = h - 1
         parallelRows(h) { y0, y1 ->
             for (y in y0 until y1) for (x in 0 until w) {
+                val i = y * w + x
                 var vx: Float; var vy: Float
                 if (directional) {
                     val s = (x - fx) * ux + (y - fy) * uy
-                    if (s <= 0f) { val j = y * w + x; for (c in 0..3) res[c][j] = pl[c][j]; continue }
+                    if (s <= 0f) { out[i] = src[i]; continue }
                     vx = ux * s * k; vy = uy * s * k
                 } else { vx = (fx - x) * k; vy = (fy - y) * k }
-                var sa = 0f; var sr = 0f; var sg = 0f; var sb = 0f
+                var sa = 0; var sr = 0; var sg = 0; var sb = 0
                 for (t in 0 until taps) {
-                    val f = t / (taps - 1f) - (if (directional) 0.5f else 0f)
-                    val xx = (x + vx * f).roundToInt().coerceIn(0, w - 1); val yy = (y + vy * f).roundToInt().coerceIn(0, h - 1)
-                    val j = yy * w + xx
-                    sa += pl[0][j]; sr += pl[1][j]; sg += pl[2][j]; sb += pl[3][j]
+                    val f = t / (taps - 1f) - off
+                    var xx = (x + vx * f + 0.5f).toInt(); if (xx < 0) xx = 0 else if (xx > wMax) xx = wMax
+                    var yy = (y + vy * f + 0.5f).toInt(); if (yy < 0) yy = 0 else if (yy > hMax) yy = hMax
+                    val c = pm[yy * w + xx]
+                    sa += c ushr 24; sr += (c shr 16) and 0xFF; sg += (c shr 8) and 0xFF; sb += c and 0xFF
                 }
-                val i = y * w + x
-                res[0][i] = sa / taps; res[1][i] = sr / taps; res[2][i] = sg / taps; res[3][i] = sb / taps
+                out[i] = unpremul(sa, sr, sg, sb, taps)
             }
         }
-        fromPremulPlanes(res, out)
     }
 
     /**
