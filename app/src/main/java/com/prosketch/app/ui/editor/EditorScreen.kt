@@ -52,6 +52,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -324,8 +325,10 @@ private fun Sidebar(ed: Editor, modifier: Modifier) {
             RepeatButton(enabled = ed.canRedo, onFire = { ed.redo() }) { tint -> Icon(Icons.AutoMirrored.Filled.Redo, L.t("다시 실행"), tint = tint) }
         }
         if (showPreview != 0) {
-            val dx = with(density) { (if (ed.prefs.rightHanded) -170 else 64).dp.roundToPx() }
-            Box(Modifier.offset { IntOffset(dx, 0) }.size(150.dp).clip(RoundedCornerShape(16.dp)).background(UI.panel), contentAlignment = Alignment.Center) {
+            val dx = with(density) { (if (ed.prefs.rightHanded) -164 else 54).dp.roundToPx() }
+            // zero-footprint placement: the preview must not widen the sidebar's box, or a right-aligned
+            // sidebar slides inward while its slider is being dragged
+            Box(Modifier.layout { m, _ -> val p = m.measure(androidx.compose.ui.unit.Constraints()); layout(0, 0) { p.place(dx, 0) } }.size(150.dp).clip(RoundedCornerShape(16.dp)).background(UI.panel), contentAlignment = Alignment.Center) {
                 if (showPreview == 1) {
                     val px = ed.brushDocSize(1f, t)
                     val dpSize = with(density) { (px.coerceAtMost(130f * this.density)).toDp() }
