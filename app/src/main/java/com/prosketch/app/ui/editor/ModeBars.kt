@@ -124,6 +124,7 @@ fun SelectionBar(ed: Editor, modifier: Modifier = Modifier) {
                 TextBtn(L.t("추가"), st.op == SelectionOp.ADD) { st.op = SelectionOp.ADD }
                 TextBtn(L.t("제거"), st.op == SelectionOp.SUBTRACT) { st.op = SelectionOp.SUBTRACT }
                 TextBtn(L.t("반전")) { st.invert() }
+                TextBtn(L.t("이전 선택"), enabled = ed.previousSelection != null) { ed.reloadPreviousSelection() }
                 TextBtn(L.t("복사 및 붙여넣기")) { ed.duplicateSelection() }
                 TextBtn(L.t("페더"), feather) { feather = !feather }
                 Box {
@@ -149,6 +150,8 @@ fun TransformBar(ed: Editor, modifier: Modifier = Modifier) {
     val tt = ed.transformTool
     tt.version.let { }
     val s = tt.session ?: return
+    var numeric by remember { mutableStateOf(false) }
+    if (numeric) TransformNumbers(ed) { numeric = false }
     BottomBar(modifier) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
             TextBtn(L.t("자석"), s.magnetics) { s.magnetics = !s.magnetics; tt.changed() }
@@ -156,6 +159,7 @@ fun TransformBar(ed: Editor, modifier: Modifier = Modifier) {
             TextBtn(L.t("수평 뒤집기")) { tt.flipH() }
             TextBtn(L.t("수직 뒤집기")) { tt.flipV() }
             TextBtn(L.t("45° 회전")) { tt.rotate45() }
+            TextBtn(L.t("수치 입력")) { numeric = true }
             TextBtn(L.t("화면에 맞추기")) { tt.fitToScreen() }
             TextBtn(L.tf("보간: {0}", s.interpolation.label)) { s.interpolation = Interpolation.entries[(s.interpolation.ordinal + 1) % Interpolation.entries.size]; tt.changed() }
             TextBtn(L.t("초기화")) { tt.reset() }
@@ -655,3 +659,49 @@ fun GradientBar(ed: Editor, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/** Exact position, size and rotation of the transform box, in canvas pixels. */
+@Composable
+private fun TransformNumbers(ed: Editor, onDone: () -> Unit) {
+    val tt = ed.transformTool
+    val s = tt.session ?: return
+    val c = s.center()
+    fun f(v: Float) = String.format(java.util.Locale.US, "%.0f", v)
+    var x by remember { mutableStateOf(f(c.x)) }
+    var y by remember { mutableStateOf(f(c.y)) }
+    var w by remember { mutableStateOf(f(s.widthPx())) }
+    var h by remember { mutableStateOf(f(s.heightPx())) }
+    var r by remember { mutableStateOf(String.format(java.util.Locale.US, "%.1f", s.angle())) }
+    var lock by remember { mutableStateOf(true) }
+    val ratio = s.widthPx() / s.heightPx().coerceAtLeast(1f)
+    androidx.compose.material3.AlertDialog(onDismissRequest = onDone,
+        title = { Text(L.t("수치 입력")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                @Composable
+                fun field(label: String, v: String, set: (String) -> Unit) = androidx.compose.material3.OutlinedTextField(v, set, label = { Text(label) }, singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal), modifier = Modifier.width(150.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { field(L.t("중심 X"), x) { x = it }; field(L.t("중심 Y"), y) { y = it } }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    field(L.t("너비"), w) { w = it; if (lock) it.toFloatOrNull()?.let { v -> h = f(v / ratio) } }
+                    field(L.t("높이"), h) { h = it; if (lock) it.toFloatOrNull()?.let { v -> w = f(v * ratio) } }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    field(L.t("회전 (°)"), r) { r = it }
+                    TextBtn(L.t("비율 고정"), lock) { lock = !lock }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton({
+                val ww = w.toFloatOrNull(); val hh = h.toFloatOrNull()
+                if (ww != null && hh != null && ww >= 1f && hh >= 1f) tt.setSize(ww, hh)
+                r.toFloatOrNull()?.let { tt.setRotation(it) }
+                val nx = x.toFloatOrNull(); val ny = y.toFloatOrNull()
+                if (nx != null && ny != null) { val cc = s.center(); tt.nudge(nx - cc.x, ny - cc.y) }
+                onDone()
+            }) { Text(L.t("적용")) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onDone) { Text(L.t("취소")) } })
+}
+

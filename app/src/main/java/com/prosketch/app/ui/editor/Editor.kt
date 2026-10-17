@@ -1261,8 +1261,18 @@ class Editor(
     }
 
     // ------------------------------------------------------------------ selection
+    /** The last selection that was replaced or cleared (Procreate's "reload previous selection"). */
+    var previousSelection: Bitmap? = null
+        private set
+
+    fun reloadPreviousSelection() {
+        val p = previousSelection ?: run { hud(L.t("이전 선택이 없습니다")); return }
+        applySelection(p.copy(Bitmap.Config.ALPHA_8, true), record = true, label = L.t("이전 선택 불러오기"))
+    }
+
     fun applySelection(mask: Bitmap?, record: Boolean, label: String = L.t("선택")) {
         val before = selection
+        if (before != null) previousSelection = before
         val m = mask?.takeIf { !SelectionOps.isEmpty(it) }
         if (record && (before != null || m != null)) {
             history.push(SelectionEntry(label, before?.copy(Bitmap.Config.ALPHA_8, false), m?.copy(Bitmap.Config.ALPHA_8, false)))
