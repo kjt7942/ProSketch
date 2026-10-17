@@ -573,7 +573,18 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
 
     // QuickShape hold detection
     private var qsAnchorX = 0f; private var qsAnchorY = 0f
-    private val qsRunnable = Runnable { if (g == G.STROKE && editor.strokeActive) editor.tryQuickShape() }
+    private val qsRunnable = Runnable {
+        if (g == G.STROKE && editor.strokeActive && editor.tryQuickShape()) postDelayed(qsSettle, 180)
+    }
+    private var qsFlushPosted = false
+    private val qsFlush = Runnable {
+        qsFlushPosted = false
+        editor.flushQuickShape()
+        removeCallbacks(qsSettle)
+        if (editor.quickShapeIsPreview) postDelayed(qsSettle, 180)
+    }
+    // full-quality render once the pen rests
+    private val qsSettle = Runnable { if (editor.quickShape != null && editor.quickShapeIsPreview) editor.renderQuickShape() }
 
     private val holdEyedropper = Runnable {
         if (g == G.PENDING && editor.mode == Mode.PAINT) {
@@ -807,6 +818,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
                 if (idx < 0) return
                 for (h in 0 until e.historySize) editor.strokeTo(point(e, idx, h))
                 editor.strokeTo(point(e, idx))
+                if (editor.quickShape != null && !qsFlushPosted) { qsFlushPosted = true; postOnAnimation(qsFlush) }
                 val x = e.getX(idx); val y = e.getY(idx)
                 paintPos = PointF(x, y); hoverPos = null
                 if (editor.quickShape == null && editor.prefs.quickShape) {

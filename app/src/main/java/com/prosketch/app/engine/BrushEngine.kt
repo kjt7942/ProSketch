@@ -204,6 +204,7 @@ class BrushStroke(
     private var lastDirAngle = 0f
     private var lastSpeed = 0f
     private var curvePrev: InputPoint? = null
+    private var minSpacing = 0f
     private var useTaper = stylus || brush.taperFinger
     private val taperStartLen = brush.taperStart * (baseSize * 5f + 120f)
     private val taperEndLen = brush.taperEnd * (baseSize * 5f + 120f)
@@ -254,13 +255,21 @@ class BrushStroke(
         if (useTaper && taperEndLen > 0f && dabs.size > 2) applyEndTaper()
     }
 
-    /** Re-renders the stroke along a fixed path (QuickShape). */
-    fun replacePath(points: List<PointF>, pressure: Float) {
+    /**
+     * Re-renders the stroke along a fixed path (QuickShape). [maxStamps] caps the work for a live
+     * preview by spreading dabs further apart; pass no cap for the final render.
+     */
+    fun replacePath(points: List<PointF>, pressure: Float, maxStamps: Int = Int.MAX_VALUE) {
         useTaper = false   // geometric shapes are drawn with an even line
         target.clear()
         dabs.clear()
         distance = 0f; nextDabAt = 0f
         if (points.isEmpty()) return
+        minSpacing = if (maxStamps == Int.MAX_VALUE) 0f else {
+            var len = 0f
+            for (i in 1 until points.size) len += hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y)
+            len * symmetry.size * max(1, brush.count) / maxStamps
+        }
         val t = System.currentTimeMillis()
         var last = InputPoint(points[0].x, points[0].y, pressure, 0f, 0f, t)
         emitAlong(last, last, true)
@@ -331,7 +340,7 @@ class BrushStroke(
     }
 
     private fun spacingFor(p: InputPoint): Float {
-        val sp = max(0.35f, brush.spacing * sizeAt(p))
+        val sp = max(max(0.35f, minSpacing), brush.spacing * sizeAt(p))
         return if (brush.spacingJitter > 0f) sp * (1f + brush.spacingJitter * (rnd.nextFloat() * 2f - 0.5f)) else sp
     }
 

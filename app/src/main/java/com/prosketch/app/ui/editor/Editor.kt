@@ -383,7 +383,8 @@ class Editor(
         val p = p0.copy(pressure = if (strokeStylus) pressureCurve.map(p0.pressure) else 1f)
         lastRaw = p
         val qs = quickShape
-        if (qs != null) { adjustQuickShape(PointF(p.x, p.y)); return }
+        // Re-rendering a shape is expensive; keep only the latest point and render once per frame.
+        if (qs != null) { qsPending = PointF(p.x, p.y); return }
         rawPoints.add(PointF(p.x, p.y)); pressureSum += p.pressure; pressureCount++
         val a = assist
         if (a != null) {
@@ -409,6 +410,8 @@ class Editor(
 
     fun endStroke() {
         val layer = strokeLayer
+        flushQuickShape()
+        if (quickShapeIsPreview) renderQuickShape()
         val qs = quickShape
         try {
             if (smudge != null && layer != null) {
@@ -503,7 +506,8 @@ class Editor(
         val shape = QuickShapeRecognizer.recognize(rawPoints) ?: return false
         val anchor = lastRaw?.let { PointF(it.x, it.y) } ?: rawPoints.last()
         quickShape = QuickShapeState(shape, anchor, shape)
-        renderQuickShape()
+        qsPending = null; qsLast = anchor
+        renderQuickShape(preview = true)
         hud("QuickShape: ${shape.label}")
         return true
     }
@@ -511,12 +515,26 @@ class Editor(
     fun quickShapePerfect() {
         val qs = quickShape ?: return
         qs.perfect = !qs.perfect
-        lastRaw?.let { adjustQuickShape(PointF(it.x, it.y)) } ?: renderQuickShape()
+        lastRaw?.let { adjustQuickShape(PointF(it.x, it.y)) }
+        renderQuickShape()
         hud(if (qs.perfect) L.tf("완벽한 {0}", qs.current.label) else qs.shape.label)
+    }
+
+    private var qsPending: PointF? = null
+    private var qsLast: PointF? = null
+
+    /** Applies the latest held-pen position to the QuickShape (called once per frame). */
+    fun flushQuickShape() {
+        val p = qsPending ?: return
+        qsPending = null
+        val last = qsLast
+        if (last != null && hypot(p.x - last.x, p.y - last.y) < 0.75f) return
+        adjustQuickShape(p)
     }
 
     private fun adjustQuickShape(p: PointF) {
         val qs = quickShape ?: return
+        qsLast = PointF(p.x, p.y)
         var cur: QShape = when (val s = qs.shape) {
             is QShape.Line -> QShape.Line(s.a, p)
             else -> {
@@ -533,13 +551,20 @@ class Editor(
         }
         if (qs.perfect) cur = cur.perfect()
         qs.current = cur
-        renderQuickShape()
+        renderQuickShape(preview = true)
     }
 
-    private fun renderQuickShape() {
+    /** True while the shape on screen is the cheap preview rather than the full-quality render. */
+    var quickShapeIsPreview = false
+        private set
+
+    /** [preview] draws a lighter version while the pen is moving; the full render follows when it rests. */
+    fun renderQuickShape(preview: Boolean = false) {
         val qs = quickShape ?: return
         val shape = if (qs.perfect && qs.current === qs.shape) qs.shape.perfect() else qs.current
-        stroke?.replacePath(shape.path(), (pressureSum / pressureCount.coerceAtLeast(1)).coerceIn(0.2f, 1f))
+        stroke?.replacePath(shape.path(), (pressureSum / pressureCount.coerceAtLeast(1)).coerceIn(0.2f, 1f),
+            if (preview) 1500 else Int.MAX_VALUE)
+        quickShapeIsPreview = preview
         invalidate()
     }
 
