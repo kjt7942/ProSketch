@@ -44,6 +44,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Gradient
 import androidx.compose.material.icons.filled.Timelapse
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -162,6 +164,8 @@ fun ActionsPanel(ed: Editor, modifier: Modifier = Modifier) {
                     }
                     MenuRow(L.t("비공개 사진 삽입"), Icons.Filled.Image, sub = L.t("타임랩스와 갤러리 미리보기에서 제외")) { privatePhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
                     MenuRow(L.t("텍스트 추가"), Icons.Filled.TextFields) { ed.startNewText() }
+                    MenuRow(L.t("도형 그리기"), Icons.Filled.Category, sub = L.t("사각형 · 타원 · 직선 · 다각형 · 별")) { ed.shapeTool.begin() }
+                    MenuRow(L.t("그라디언트"), Icons.Filled.Gradient, sub = L.t("선형 · 방사형")) { ed.gradientTool.begin() }
                     MenuRow(L.t("잘라내기"), Icons.Filled.ContentCut) { ed.cut() }
                     MenuRow(L.t("복사"), Icons.Filled.ContentCopy) { ed.copy() }
                     MenuRow(L.t("모두 복사"), Icons.Filled.ContentCopy) { ed.copy(all = true) }

@@ -599,3 +599,59 @@ fun TimelapseReplay(ed: Editor, onClose: () -> Unit) {
 }
 
 @Suppress("unused") private fun unusedAbs(x: Float) = abs(x)
+
+// ---------------------------------------------------------------- Shapes & gradients
+@Composable
+fun ShapeBar(ed: Editor, modifier: Modifier = Modifier) {
+    val t = ed.shapeTool
+    t.version.let { }
+    BottomBar(modifier) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                Segmented(ShapeKind.entries.map { it.label }, t.kind.ordinal, Modifier.width(380.dp)) { t.kind = ShapeKind.entries[it]; t.changed() }
+                if (t.kind != ShapeKind.LINE) Segmented(ShapeStyle.entries.map { it.label }, t.style.ordinal, Modifier.width(260.dp)) { t.style = ShapeStyle.entries[it]; t.changed() }
+                TextBtn(L.t("비율 고정"), t.constrain) { t.constrain = !t.constrain; t.changed() }
+                if (t.kind != ShapeKind.LINE) TextBtn(L.t("중심에서"), t.fromCenter) { t.fromCenter = !t.fromCenter; t.changed() }
+                TextBtn(L.t("취소"), enabled = t.hasItem()) { t.cancel() }
+                TextBtn(L.t("완료"), true) { ed.exitModes() }
+            }
+            Row(Modifier.width(640.dp).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (t.kind == ShapeKind.LINE || t.style != ShapeStyle.FILL) Box(Modifier.weight(1f)) {
+                    LabeledSlider(L.t("선 두께"), t.width, 0.001f..0.1f, "${t.strokePx().roundToInt()}px", { t.width = it; t.changed() })
+                }
+                if (t.kind == ShapeKind.RECT) Box(Modifier.weight(1f)) {
+                    LabeledSlider(L.t("모서리 둥글기"), t.corner, 0f..1f, "${(t.corner * 100).roundToInt()}%", { t.corner = it; t.changed() })
+                }
+                if (t.kind == ShapeKind.POLYGON || t.kind == ShapeKind.STAR) Box(Modifier.weight(1f)) {
+                    LabeledSlider(L.t("꼭짓점"), t.sides.toFloat(), 3f..12f, "${t.sides}", { t.sides = it.roundToInt(); t.changed() })
+                }
+            }
+            Text(
+                if (t.style == ShapeStyle.BOTH && t.kind != ShapeKind.LINE) L.t("드래그하여 그리기 · 점을 끌어 크기 조절 · 안쪽을 끌어 이동 · 바깥을 터치하면 확정 · 채우기는 이전 색상")
+                else L.t("드래그하여 그리기 · 점을 끌어 크기 조절 · 안쪽을 끌어 이동 · 바깥을 터치하면 확정"),
+                color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+fun GradientBar(ed: Editor, modifier: Modifier = Modifier) {
+    val t = ed.gradientTool
+    t.version.let { }
+    BottomBar(modifier) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                Segmented(GradientKind.entries.map { it.label }, t.kind.ordinal, Modifier.width(180.dp)) { t.kind = GradientKind.entries[it]; t.changed() }
+                Segmented(listOf(L.t("이전 색상까지"), L.t("투명까지")), if (t.toTransparent) 1 else 0, Modifier.width(320.dp)) { t.toTransparent = it == 1; t.changed() }
+                TextBtn(L.t("반전")) { t.reversed = !t.reversed; t.changed() }
+                TextBtn(L.t("취소"), enabled = t.hasItem()) { t.cancel() }
+                TextBtn(L.t("완료"), true) { ed.exitModes() }
+            }
+            Box(Modifier.width(420.dp).padding(top = 4.dp)) {
+                LabeledSlider(L.t("불투명도"), t.opacity, 0f..1f, "${(t.opacity * 100).roundToInt()}%", { t.opacity = it; t.changed() })
+            }
+            Text(L.t("드래그하여 시작점과 끝점 지정 · 점을 끌어 조절 · 다른 곳을 터치하면 확정"), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+}

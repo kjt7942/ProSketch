@@ -109,6 +109,8 @@ fun EditorScreen(ed: Editor, onCanvasView: (CanvasView) -> Unit, onExit: () -> U
                 Mode.ADJUST -> AdjustBar(ed, bottom)
                 Mode.LIQUIFY -> LiquifyBar(ed, bottom)
                 Mode.GUIDE_EDIT -> GuideBar(ed, bottom)
+                Mode.SHAPE -> ShapeBar(ed, bottom)
+                Mode.GRADIENT -> GradientBar(ed, bottom)
                 Mode.PAINT -> if (ed.doc.animation.enabled) AnimationTimeline(ed, bottom)
             }
         } else {

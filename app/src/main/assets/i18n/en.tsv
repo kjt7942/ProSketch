@@ -850,3 +850,36 @@ ProSketch 파일이 아닙니다	Not a ProSketch file
 Swatches.json이 없습니다	Swatches.json is missing
 팔레트	Palette
 {0}px · 슬라이더 100%: {1}px	{0}px · slider 100%: {1}px
+선	Stroke
+채우기	Fill
+선+채우기	Stroke + fill
+도형: {0}	Shape: {0}
+그라디언트	Gradient
+비율 고정	Lock ratio
+중심에서	From centre
+선 두께	Line width
+모서리 둥글기	Corner radius
+꼭짓점	Points
+드래그하여 그리기 · 점을 끌어 크기 조절 · 안쪽을 끌어 이동 · 바깥을 터치하면 확정 · 채우기는 이전 색상	Drag to draw · drag a point to resize · drag inside to move · touch outside to commit · fill uses the previous colour
+드래그하여 그리기 · 점을 끌어 크기 조절 · 안쪽을 끌어 이동 · 바깥을 터치하면 확정	Drag to draw · drag a point to resize · drag inside to move · touch outside to commit
+이전 색상으로	To previous colour
+투명으로	To transparent
+드래그하여 시작점과 끝점 지정 · 점을 끌어 조절 · 다른 곳을 터치하면 확정	Drag to set start and end · drag a point to adjust · touch elsewhere to commit
+도형 그리기	Draw shape
+사각형 · 타원 · 직선 · 다각형 · 별	Rectangle · ellipse · line · polygon · star
+선형 · 원형	Linear · radial
+직사각형	Rectangle
+방사형	Radial
+이전 색상까지	To previous colour
+투명까지	To transparent
+선형 · 방사형	Linear · radial
+꺼내기 ({0})	Take out ({0})
+미리보기	Preview
+스택	Stack
+스택 ({0})	Stack ({0})
+스택 이름 변경	Rename stack
+스택 풀기	Unstack
+스택에서 꺼내기	Take out of stack
+작품 {0}개	{0} artworks
+작품 {0}개 모두 삭제	Delete all {0} artworks
+열기	Open

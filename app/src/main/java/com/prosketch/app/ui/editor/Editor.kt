@@ -79,7 +79,7 @@ import kotlin.math.min
 import kotlin.math.sin
 
 enum class Tool(val label: String) { BRUSH(L.t("페인트")), SMUDGE(L.t("문지르기")), ERASER(L.t("지우기")) }
-enum class Mode { PAINT, SELECT, TRANSFORM, ADJUST, LIQUIFY, GUIDE_EDIT }
+enum class Mode { PAINT, SELECT, TRANSFORM, ADJUST, LIQUIFY, GUIDE_EDIT, SHAPE, GRADIENT }
 enum class Panel { BRUSHES, LAYERS, COLOR, ACTIONS, ADJUSTMENTS, BRUSH_STUDIO, HISTORY }
 
 class Hud(val text: String, val time: Long = SystemClock.uptimeMillis(), val action: Pair<String, () -> Unit>? = null)
@@ -159,6 +159,8 @@ class Editor(
     val selectionTool = SelectionTool(this)
     val transformTool = TransformTool(this)
     val adjustTool = AdjustTool(this)
+    val shapeTool = ShapeTool(this)
+    val gradientTool = GradientTool(this)
 
     var invalidator: (() -> Unit)? = null
     var fitRequest: (() -> Unit)? = null
@@ -226,7 +228,7 @@ class Editor(
     fun emergencySave() {
         runCatching {
             if (strokeActive) cancelStroke()
-            val thumb = Compositor.flatten(doc, min(1f, 640f / max(doc.width, doc.height)), publicHook)
+            val thumb = Compositor.flatten(doc, min(1f, 1024f / max(doc.width, doc.height)), publicHook)
             store.write(store.snapshot(doc, thumb))
         }
     }
@@ -1386,6 +1388,8 @@ class Editor(
             Mode.TRANSFORM -> transformTool.commit()
             Mode.ADJUST, Mode.LIQUIFY -> adjustTool.apply()
             Mode.SELECT -> selectionTool.finish()
+            Mode.SHAPE -> shapeTool.finish()
+            Mode.GRADIENT -> gradientTool.finish()
             else -> {}
         }
         mode = Mode.PAINT
@@ -1396,6 +1400,8 @@ class Editor(
         if (strokeActive) { cancelStroke(); return }
         if (mode == Mode.TRANSFORM && transformTool.session != null) { transformTool.cancel(); hud(L.t("변형 취소")); return }
         if (mode == Mode.SELECT && selectionTool.undoPending()) return
+        if (mode == Mode.SHAPE && shapeTool.hasItem()) { shapeTool.cancel(); return }
+        if (mode == Mode.GRADIENT && gradientTool.hasItem()) { gradientTool.cancel(); return }
         val l = history.undo()
         if (l != null) hud(L.tf("실행 취소: {0}", l)) else hud(L.t("실행 취소할 항목이 없습니다"))
         if (referenceVisible) referenceVersion++
@@ -1413,6 +1419,8 @@ class Editor(
             if (drawStrokeLive(canvas, layer, paint)) return true
             if (transformTool.drawLive(canvas, layer, paint)) return true
             if (adjustTool.drawLive(canvas, layer, paint)) return true
+            if (shapeTool.drawLive(canvas, layer, paint)) return true
+            if (gradientTool.drawLive(canvas, layer, paint)) return true
             if (drawFillLive(canvas, layer, paint)) return true
             return false
         }
@@ -1508,7 +1516,7 @@ class Editor(
         val now = SystemClock.elapsedRealtime()
         doc.timeSpentMs += now - sessionStart
         sessionStart = now
-        val thumb = Compositor.flatten(doc, min(1f, 640f / max(doc.width, doc.height)), publicHook)
+        val thumb = Compositor.flatten(doc, min(1f, 1024f / max(doc.width, doc.height)), publicHook)
         val snap = store.snapshot(doc, thumb)
         dirty = false
         scope.launch(saveDispatcher) {

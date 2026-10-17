@@ -69,6 +69,8 @@ enum class QuickAction(val label: String, val run: (Editor) -> Unit) {
     SELECTION(L.t("선택 도구"), { it.selectionTool.begin() }),
     TRANSFORM(L.t("변형 도구"), { it.exitModes(); it.transformTool.begin() }),
     ADD_TEXT(L.t("텍스트 추가"), { it.startNewText() }),
+    SHAPE(L.t("도형 그리기"), { it.shapeTool.begin() }),
+    GRADIENT(L.t("그라디언트"), { it.gradientTool.begin() }),
     FULLSCREEN(L.t("전체 화면"), { it.fullscreen = !it.fullscreen }),
     FIT_SCREEN(L.t("화면에 맞추기"), { it.fitRequest?.invoke() }),
     MIRROR_VIEW(L.t("좌우 반전 보기"), { it.toggleMirrorView() }),

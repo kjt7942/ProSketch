@@ -383,6 +383,12 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
                 linePaint.pathEffect = null
             }
             Mode.TRANSFORM -> drawTransform(canvas)
+            Mode.SHAPE -> drawPlacement(canvas, editor.shapeTool.handlePoints(), false)
+            Mode.GRADIENT -> {
+                val t = editor.gradientTool
+                val p = t.a; val q = t.b
+                if (p != null && q != null) drawPlacement(canvas, listOf(p, q), true)
+            }
             Mode.ADJUST -> drawAdjustOverlay(canvas)
             Mode.LIQUIFY -> {
                 val lq = editor.adjustTool.liquify ?: return
@@ -1087,6 +1093,54 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
         }
     }
 
+    // ---- shape / gradient placement: drag to create, drag a handle to reshape, drag inside a shape to move,
+    // touch elsewhere to commit and start the next one
+    private var phHit = 0      // 0 none, 1 first point, 2 second point, 3 move, 4 new item
+    private var phStartX = 0f; private var phStartY = 0f
+
+    private fun placeDown(t: com.prosketch.app.ui.editor.PlacementTool, x: Float, y: Float, d: PointF) {
+        phStartX = x; phStartY = y
+        val pts = if (t is com.prosketch.app.ui.editor.ShapeTool) t.handlePoints() else listOfNotNull(t.a, t.b)
+        val r = 30f * density
+        phHit = 0
+        pts.forEachIndexed { i, p -> val s = toScreen(p.x, p.y); if (phHit == 0 && hypot(s.x - x, s.y - y) < r) phHit = i + 1 }
+        if (phHit == 0 && t is com.prosketch.app.ui.editor.ShapeTool && t.hasItem()) {
+            val b = t.bounds(); if (b.contains(d.x, d.y)) phHit = 3
+        }
+        if (phHit == 0) {
+            if (t.hasItem()) t.commit()
+            t.setPoints(PointF(d.x, d.y), PointF(d.x, d.y))
+            phHit = 4
+        }
+    }
+
+    private fun placeMove(t: com.prosketch.app.ui.editor.PlacementTool, d: PointF, prevD: PointF) {
+        when (phHit) {
+            1 -> t.moveA(PointF(d.x, d.y))
+            2, 4 -> t.moveB(PointF(d.x, d.y))
+            3 -> t.moveBy(d.x - prevD.x, d.y - prevD.y)
+        }
+    }
+
+    private fun placeUp(t: com.prosketch.app.ui.editor.PlacementTool) {
+        // a tap that made no shape: drop it
+        if (phHit == 4 && hypot(toolLastX - phStartX, toolLastY - phStartY) < 6f * density) t.cancel()
+        phHit = 0
+    }
+
+    private fun drawPlacement(canvas: Canvas, pts: List<PointF>, line: Boolean) {
+        if (pts.size < 2) return
+        val s0 = toScreen(pts[0].x, pts[0].y); val s1 = toScreen(pts[1].x, pts[1].y)
+        if (line) {
+            linePaint.color = Color.WHITE; linePaint.alpha = 255; linePaint.strokeWidth = 2f * density
+            linePaint.pathEffect = DashPathEffect(floatArrayOf(10f * density, 6f * density), 0f)
+            canvas.drawLine(s0.x, s0.y, s1.x, s1.y, linePaint)
+            linePaint.pathEffect = null
+        }
+        handle(canvas, s0.x, s0.y, accent)
+        handle(canvas, s1.x, s1.y, accent)
+    }
+
     private fun toolDown(x: Float, y: Float, pressure: Float) {
         toolLastX = x; toolLastY = y
         lastToolPos = PointF(x, y)
@@ -1110,6 +1164,8 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
             Mode.LIQUIFY -> { editor.adjustTool.syncLiquify(); momentumVx = 0f; momentumVy = 0f }
             Mode.ADJUST -> adjustDown(x, y, pressure)
             Mode.GUIDE_EDIT -> guideDown(x, y)
+            Mode.SHAPE -> placeDown(editor.shapeTool, x, y, d)
+            Mode.GRADIENT -> placeDown(editor.gradientTool, x, y, d)
             Mode.PAINT -> if (editor.continueFill) { /* handled on up */ }
             else -> {}
         }
@@ -1142,6 +1198,8 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
             }
             Mode.ADJUST -> adjustMove(x, y, dxs, pressure, d)
             Mode.GUIDE_EDIT -> guideMove(d, prevD, x, y)
+            Mode.SHAPE -> placeMove(editor.shapeTool, d, prevD)
+            Mode.GRADIENT -> placeMove(editor.gradientTool, d, prevD)
             else -> {}
         }
         toolLastX = x; toolLastY = y
@@ -1164,6 +1222,8 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
             Mode.LIQUIFY -> startMomentum()
             Mode.ADJUST -> adjustUp()
             Mode.TRANSFORM -> { tfHit = -1; editor.transformTool.changed() }
+            Mode.SHAPE -> placeUp(editor.shapeTool)
+            Mode.GRADIENT -> placeUp(editor.gradientTool)
             Mode.PAINT -> if (editor.continueFill && tap) { val d = toDoc(downX, downY); editor.colorDropCommit(d.x, d.y, true) }
             else -> {}
         }
