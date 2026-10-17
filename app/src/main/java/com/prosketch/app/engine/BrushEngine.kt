@@ -22,6 +22,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /** A raw input sample in document coordinates. tilt = radians from perpendicular, orientation = azimuth radians. */
@@ -280,6 +281,26 @@ class BrushStroke(
         }
     }
 
+    /** The end taper shrinks dabs placed for the full size; fill the gaps so the tip stays a clean point. */
+    private fun densifyTail(total: Float) {
+        val from = dabs.indexOfFirst { total - it.dist < taperEndLen }.coerceAtLeast(1)
+        val out = ArrayList<Dab>(dabs.size + 64)
+        for (i in 0 until from) out.add(dabs[i])
+        for (i in from until dabs.size) {
+            val a = dabs[i - 1]; val b = dabs[i]
+            val gap = hypot(b.x - a.x, b.y - a.y)
+            val want = spacingPx(min(a.size, b.size))
+            val n = (gap / want).toInt()
+            for (k in 1 until n.coerceAtMost(64)) {
+                val t = k / n.toFloat()
+                out.add(Dab(lerp(a.x, b.x, t), lerp(a.y, b.y, t), lerp(a.size, b.size, t), lerp(a.alpha, b.alpha, t),
+                    a.angle, a.roundness, a.color, a.flipX, a.flipY, lerp(a.dist, b.dist, t)))
+            }
+            out.add(b)
+        }
+        dabs.clear(); dabs.addAll(out)
+    }
+
     private fun applyEndTaper() {
         val total = dabs.last().dist
         var changed = false
@@ -293,6 +314,7 @@ class BrushStroke(
             }
         }
         if (changed) {
+            if (opaqueHard) densifyTail(total)
             target.clear()
             for (d in dabs) render(d)
         }
@@ -339,8 +361,26 @@ class BrushStroke(
         return s.coerceAtLeast(0.3f)
     }
 
+    /**
+     * Dab spacing in px. Tiny brushes used to stamp every 0.35 px (hundreds of dabs per pen event); a floor of
+     * 8% of the size (at most 1 px) looks the same and is far cheaper. Opacity compensation uses the same value.
+     */
+    private fun spacingPx(size: Float): Float {
+        val sp = max(max(0.35f, min(1f, size * 0.08f)), brush.spacing * size)
+        if (!opaqueHard) return sp
+        // Opaque hard discs: the stroke is their union, so spacing only shapes the edge ripple. Allow a ripple
+        // of max(0.1 px, 0.06% of the size): chord s = sqrt(8·r·h). Same look, a fraction of the dabs.
+        val r = size / 2f
+        val h = max(0.1f, size * 0.0006f)
+        return max(sp, min(size * 0.25f, kotlin.math.sqrt(8f * r * h)))
+    }
+
     private fun spacingFor(p: InputPoint): Float {
-        val sp = max(max(0.35f, minSpacing), brush.spacing * sizeAt(p))
+        var size = sizeAt(p)
+        // the start taper shrinks dabs in placeDab; space them for the size they will actually have
+        if (useTaper && taperStartLen > 0f && distance < taperStartLen)
+            size *= lerp(brush.taperSize.coerceAtLeast(0.02f), 1f, smooth(distance / taperStartLen))
+        val sp = max(minSpacing, spacingPx(size))
         return if (brush.spacingJitter > 0f) sp * (1f + brush.spacingJitter * (rnd.nextFloat() * 2f - 0.5f)) else sp
     }
 
@@ -373,8 +413,7 @@ class BrushStroke(
 
         // Convert per-pixel target opacity into a per-dab alpha, accounting for dab overlap so that
         // pressure→opacity stays meaningful even with tight spacing.
-        val spacingPx = max(0.35f, brush.spacing * size)
-        val overlap = (size / spacingPx * 0.55f).coerceIn(1f, 60f)
+        val overlap = (size / spacingPx(size) * 0.55f).coerceIn(1f, 60f)
         val targetA = (opac * flow).coerceIn(0f, 1f)
         val dabA = if (brush.pressureOpacity > 0f || brush.tiltOpacity > 0f || brush.fallOff > 0f || useTaper && brush.taperOpacity > 0f)
             1f - (1f - targetA).pow(1f / overlap) else targetA
@@ -422,8 +461,22 @@ class BrushStroke(
         }
     }
 
+    private val roundTip = brush.tip == TipShape.ROUND && brush.customTip == null
+    private val center = FloatArray(2)
+    private val blitPaint = Paint()
+    /** Hard round tips are drawn as anti-aliased circles: Skia fills them far faster than it blits a bitmap. */
+    private val hardRound = roundTip && brush.tipHardness >= 0.97f && grain == null
+    /** Every dab fully opaque and identical in colour: overlapping more densely changes nothing. */
+    private val opaqueHard = hardRound && brush.flow >= 0.99f && (brush.glaze || baseOpacity >= 0.99f) &&
+        brush.pressureOpacity == 0f && brush.tiltOpacity == 0f && brush.speedOpacity == 0f && brush.jitterOpacity == 0f &&
+        brush.fallOff == 0f && brush.taperOpacity == 0f && brush.dilution == 0f && brush.pull == 0f && brush.count <= 1 &&
+        brush.jitterLateral == 0f && brush.jitterLinear == 0f && brush.stampHue == 0f && brush.stampSat == 0f && brush.stampBri == 0f
+
     private fun render(d: Dab) {
         if (d.alpha <= 0.001f || d.size <= 0.05f) return
+        if (d.size >= 16f && !d.flipX && !d.flipY && d.roundness >= 0.999f && (roundTip || abs(d.angle % 360f) < 0.01f)) {
+            renderExact(d); return
+        }
         val tip = tips.forSize(d.size)
         val tw = tip.width.toFloat()
         val sx = d.size / tw * (if (d.flipX) -1f else 1f)
@@ -444,6 +497,46 @@ class BrushStroke(
             mtx.mapRect(tmpRect)
             target.drawDab(tmpRect) { c -> c.drawBitmap(tip, mtx, paint) }
         }
+    }
+
+    /** Translate-only stamp of a pre-scaled tip (size quantised to ~2.5%, invisible at these sizes). */
+    private fun renderExact(d: Dab) {
+        val s0 = d.size.roundToInt()
+        val step = max(1, s0 / 40)
+        val q = max(1, (s0 + step / 2) / step * step)
+        val tip = BrushTextures.tipExact(brush, q)
+        paint.color = d.color
+        paint.alpha = (d.alpha * 255f).toInt().coerceIn(1, 255)
+        paint.shader = grain?.let { grainShaderFor(d.color) }
+        blitPaint.color = paint.color
+        blitPaint.shader = paint.shader
+        val half = q / 2f
+        for (sym in symmetry) {
+            center[0] = d.x; center[1] = d.y
+            if (!sym.isIdentity) {
+                if (!roundTip) { renderMatrix(d, sym); continue }   // a mirrored/rotated non-round tip needs the matrix path
+                sym.mapPoints(center)
+            }
+            // whole-pixel position (≤0.5 px off, invisible at ≥16 px) lets Skia use its unfiltered mask blitter
+            val left = (center[0] - half).roundToInt().toFloat(); val top = (center[1] - half).roundToInt().toFloat()
+            tmpRect.set(left, top, left + q, top + q)
+            if (hardRound) { val cx = center[0]; val cy = center[1]; target.drawDab(tmpRect) { c -> c.drawCircle(cx, cy, half, paint) } }
+            else target.drawDab(tmpRect) { c -> c.drawBitmap(tip, left, top, blitPaint) }
+        }
+    }
+
+    private fun renderMatrix(d: Dab, sym: Matrix) {
+        val tip = tips.forSize(d.size)
+        val tw = tip.width.toFloat()
+        mtx.reset()
+        mtx.postTranslate(-tw / 2f, -tw / 2f)
+        mtx.postScale(d.size / tw * (if (d.flipX) -1f else 1f), d.size * d.roundness / tw * (if (d.flipY) -1f else 1f))
+        mtx.postRotate(d.angle)
+        mtx.postTranslate(d.x, d.y)
+        mtx.postConcat(sym)
+        tmpRect.set(0f, 0f, tw, tw)
+        mtx.mapRect(tmpRect)
+        target.drawDab(tmpRect) { c -> c.drawBitmap(tip, mtx, paint) }
     }
 
     private var cachedShaderColor = 0
@@ -595,7 +688,16 @@ class SmudgeStroke(
             carrier = nc; carrierSize = n; car = nc
         }
         val pull = brush.smudgePull.coerceIn(0f, 1f)
-        for (yy in 0 until h) {
+        // rows are independent: big dabs are split across cores
+        if (w * h >= 150_000) Filters.parallelRows(h) { r0, r1 -> smudgeRows(r0, r1, w, x0, y0, left, top, n, mask, car, str, pull) }
+        else smudgeRows(0, h, w, x0, y0, left, top, n, mask, car, str, pull)
+        layer.setPixels(buf, 0, w, x0, y0, w, h)
+        if (!hasDirty) { dirty.set(x0, y0, x1, y1); hasDirty = true } else dirty.union(x0, y0, x1, y1)
+    }
+
+    private fun smudgeRows(r0: Int, r1: Int, w: Int, x0: Int, y0: Int, left: Int, top: Int, n: Int,
+                           mask: ByteArray, car: IntArray, str: Float, pull: Float) {
+        for (yy in r0 until r1) {
             val cy = yy + y0 - top
             for (xx in 0 until w) {
                 val cx = xx + x0 - left
@@ -614,8 +716,6 @@ class SmudgeStroke(
                 car[cy * n + cx] = lerpPremul(c, out, (1f - pull) * m)
             }
         }
-        layer.setPixels(buf, 0, w, x0, y0, w, h)
-        if (!hasDirty) { dirty.set(x0, y0, x1, y1); hasDirty = true } else dirty.union(x0, y0, x1, y1)
     }
 
     fun dirtyRect(): Rect? = if (hasDirty) Rect(dirty) else null

@@ -1,0 +1,4 @@
+# Baseline Profile: ahead-of-time compile all of ProSketch (Compose ships its own profiles).
+# Without it the first use of each brush/filter/screen runs interpreted and JIT-warms (5-7x slower).
+HSPLcom/prosketch/app/**;->**(**)**
+Lcom/prosketch/app/**;

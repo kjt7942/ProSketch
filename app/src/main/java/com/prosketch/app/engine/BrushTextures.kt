@@ -61,6 +61,30 @@ object BrushTextures {
         }
     }
 
+    private val exactCache = LinkedHashMap<String, Bitmap>(32, 0.75f, true)
+    private var exactBytes = 0L
+
+    /**
+     * The tip pre-scaled to exactly [size] px, so a dab can be stamped with a plain translate instead of a
+     * scaled, filtered draw (several times cheaper for big brushes). LRU-capped at about 48 MB.
+     */
+    @Synchronized
+    fun tipExact(b: Brush, size: Int): Bitmap {
+        val key = "${b.tip}|${(b.tipHardness * 40).toInt()}|${b.customTip}|$size"
+        exactCache[key]?.let { return it }
+        val bmp = Bitmap.createScaledBitmap(tip(b).forSize(size.toFloat()), size, size, true)
+        exactCache[key] = bmp
+        exactBytes += bmp.byteCount
+        val it = exactCache.entries.iterator()
+        while (exactBytes > 48L * 1024 * 1024 && it.hasNext()) {
+            val e = it.next()
+            if (e.value === bmp) continue
+            exactBytes -= e.value.byteCount
+            it.remove()   // not recycled: a stroke on another thread may still be drawing it
+        }
+        return bmp
+    }
+
     /** Tip coverage as a byte array of a given (square) size, used by the smudge engine. */
     @Synchronized
     fun tipMask(b: Brush, size: Int): ByteArray {
