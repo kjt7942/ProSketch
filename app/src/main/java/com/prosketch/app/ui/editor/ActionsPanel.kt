@@ -1,5 +1,6 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.ui.common.screen
 import com.prosketch.app.L
 
 import android.graphics.Typeface
@@ -153,7 +154,7 @@ fun ActionsPanel(ed: Editor, modifier: Modifier = Modifier) {
     PanelBox(modifier, title = L.t("동작")) {
         Segmented(listOf(L.t("추가"), L.t("캔버스"), L.t("공유"), L.t("비디오"), L.t("설정"), L.t("도움말")), tab, Modifier.fillMaxWidth()) { tab = it }
         Spacer(Modifier.height(8.dp))
-        Column(Modifier.height(500.dp).verticalScroll(rememberScrollState())) {
+        Column(Modifier.height(screen().body(500.dp, 120.dp)).verticalScroll(rememberScrollState())) {
             when (tab) {
                 0 -> {
                     MenuRow(L.t("사진 삽입"), Icons.Filled.Image) { photo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }

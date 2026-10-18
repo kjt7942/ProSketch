@@ -1,5 +1,10 @@
 package com.prosketch.app.ui.gallery
 
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
+import com.prosketch.app.ui.common.screen
 import com.prosketch.app.L
 
 import android.graphics.Bitmap
@@ -141,6 +146,7 @@ fun GalleryScreen(store: ProjectStore, onOpen: (String) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
+    val sc = screen()
     var refresh by remember { mutableIntStateOf(0) }
     val layout = remember { GalleryLayout(File(store.root, "gallery.json")) }
     // null until the first listing: reconciling the layout against an empty list would wipe the stacks
@@ -254,7 +260,7 @@ fun GalleryScreen(store: ProjectStore, onOpen: (String) -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().background(Color(0xFF111113)).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(if (sc.compact) 54.dp else 60.dp).padding(horizontal = if (sc.compactW) 10.dp else 18.dp), verticalAlignment = Alignment.CenterVertically) {
             if (stackEntry != null) {
                 IconBtn(Icons.AutoMirrored.Filled.ArrowBack, L.t("갤러리")) { openStack = null; selecting = false; selected.clear() }
                 Spacer(Modifier.width(6.dp))
@@ -263,11 +269,12 @@ fun GalleryScreen(store: ProjectStore, onOpen: (String) -> Unit) {
                 Spacer(Modifier.width(10.dp))
                 Text(L.tf("작품 {0}개", stackEntry.items.size), color = UI.text2, fontSize = 14.sp)
             } else {
-                Text("ProSketch", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(12.dp))
-                Text(L.t("갤러리"), color = UI.text2, fontSize = 16.sp)
+                Text("ProSketch", color = Color.White, fontSize = if (sc.compactW) 20.sp else 24.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                if (!sc.compactW) { Spacer(Modifier.width(12.dp)); Text(L.t("갤러리"), color = UI.text2, fontSize = 16.sp) }
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.weight(1f).widthIn(min = 8.dp))
+            // phones: the buttons scroll sideways instead of being cut off
+            Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
             if (selecting) {
                 val arts = selected.filter { id -> all.any { it.id == id } }
                 if (openStack == null) {
@@ -289,6 +296,7 @@ fun GalleryScreen(store: ProjectStore, onOpen: (String) -> Unit) {
                 IconBtn(Icons.Filled.Add, L.t("새 캔버스")) { newDialog = true }
                 if (com.prosketch.app.BuildConfig.SELF_UPDATE) IconBtn(Icons.Filled.SystemUpdate, L.t("업데이트 확인")) { UpdateController.check(ctx, silent = false) }
             }
+            }
         }
         if (loaded == null) Spacer(Modifier.fillMaxSize())
         else if (entries.isEmpty()) {
@@ -299,8 +307,8 @@ fun GalleryScreen(store: ProjectStore, onOpen: (String) -> Unit) {
                     TextBtn(L.t("+ 새 캔버스 만들기"), true) { newDialog = true }
                 }
             }
-        } else LazyVerticalGrid(GridCells.Adaptive(230.dp), Modifier.fillMaxSize().padding(horizontal = 14.dp), state = grid,
-            horizontalArrangement = Arrangement.spacedBy(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        } else LazyVerticalGrid(GridCells.Adaptive(if (sc.compactW) 150.dp else 230.dp), Modifier.fillMaxSize().padding(horizontal = if (sc.compactW) 8.dp else 14.dp), state = grid,
+            horizontalArrangement = Arrangement.spacedBy(if (sc.compactW) 10.dp else 18.dp), verticalArrangement = Arrangement.spacedBy(if (sc.compactW) 12.dp else 18.dp)) {
             items(entries, key = { it.key }) { e ->
                 val dragging = dragKey == e.key
                 val hover = if (hoverKey == e.key) hoverMode else 0
@@ -524,7 +532,8 @@ private fun NewCanvasDialog(onDismiss: () -> Unit, onCreate: (Int, Int, String, 
         onDismissRequest = onDismiss,
         title = { Text(L.t("새 캔버스")) },
         text = {
-            Column {
+            // scrolls on a phone held sideways, where the eight presets don't fit
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 if (!custom) presets.forEach { p ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { onCreate(p.w, p.h, L.t("무제 작품"), transparent) }.padding(vertical = 10.dp, horizontal = 6.dp)) {
                         Text(p.name, modifier = Modifier.weight(1f))

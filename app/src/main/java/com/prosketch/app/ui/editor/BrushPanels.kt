@@ -1,5 +1,6 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.ui.common.screen
 import com.prosketch.app.L
 
 import android.graphics.Bitmap
@@ -151,7 +152,7 @@ fun BrushLibraryPanel(ed: Editor, modifier: Modifier = Modifier) {
         }
     }) {
         if (searching) OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text(L.t("브러시 검색")) }, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
-        Row(Modifier.height(470.dp)) {
+        Row(Modifier.height(screen().body(470.dp, 70.dp))) {
             if (!searching) {
                 Column(Modifier.width(130.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
                     cats.forEach { c ->
@@ -305,7 +306,7 @@ fun BrushStudioPanel(ed: Editor, modifier: Modifier = Modifier) {
             ed.brushes.update(b); ed.chooseBrush(b.id); ed.panel = null; ed.hud(L.tf("브러시 저장됨: {0}", b.name))
         }
     }) {
-        Row(Modifier.height(520.dp)) {
+        Row(Modifier.height(screen().body(520.dp, 90.dp))) {
             Column(Modifier.width(120.dp).fillMaxHeight().verticalScroll(rememberScrollState())) {
                 (sections.map { it.first } + L.t("브러시 정보")).forEachIndexed { i, s ->
                     val sel = i == section
@@ -359,7 +360,7 @@ fun BrushStudioPanel(ed: Editor, modifier: Modifier = Modifier) {
                 }
             }
             Spacer(Modifier.width(10.dp))
-            DrawingPad(b, rev, Modifier.width(240.dp).fillMaxHeight())
+            if (!screen().compactW) DrawingPad(b, rev, Modifier.width(240.dp).fillMaxHeight())
         }
     }
 }

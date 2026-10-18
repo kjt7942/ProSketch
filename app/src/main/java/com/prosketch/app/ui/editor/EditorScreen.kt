@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Layers
@@ -68,6 +69,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.prosketch.app.ui.canvas.CanvasView
 import com.prosketch.app.ui.common.IconBtn
+import com.prosketch.app.ui.common.screen
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.prosketch.app.ui.common.UI
 import com.prosketch.app.ui.common.VerticalSlider
 import kotlinx.coroutines.delay
@@ -103,7 +108,7 @@ fun EditorScreen(ed: Editor, onCanvasView: (CanvasView) -> Unit, onExit: () -> U
             })
             if (ed.mode == Mode.PAINT || ed.mode == Mode.SELECT || (ed.mode == Mode.ADJUST && (ed.adjustTool.pencil || ed.adjustTool.type == com.prosketch.app.engine.AdjustmentType.CLONE))) Sidebar(ed, Modifier.align(if (ed.prefs.rightHanded) Alignment.CenterEnd else Alignment.CenterStart))
 
-            val bottom = Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp, start = 12.dp, end = 12.dp)
+            val bottom = Modifier.align(Alignment.BottomCenter).padding(bottom = if (screen().compact) 8.dp else 14.dp, start = 8.dp, end = 8.dp)
             when (ed.mode) {
                 Mode.SELECT -> SelectionBar(ed, bottom)
                 Mode.TRANSFORM -> TransformBar(ed, bottom)
@@ -122,22 +127,31 @@ fun EditorScreen(ed: Editor, onCanvasView: (CanvasView) -> Unit, onExit: () -> U
         }
 
         if (ed.copyPasteMenu) CopyPasteMenu(ed, Modifier.align(Alignment.TopCenter).padding(top = 64.dp))
-        ed.textEditing?.let { tl -> TextPanel(ed, tl, Modifier.align(Alignment.TopStart).padding(top = 56.dp, start = 64.dp).width(460.dp)) }
+        ed.textEditing?.let { tl ->
+            val sc = screen()
+            TextPanel(ed, tl, Modifier.align(if (sc.compactW) Alignment.TopCenter else Alignment.TopStart)
+                .padding(top = 56.dp, start = if (sc.compactW) 0.dp else 64.dp).width(sc.panel(460.dp))
+                .then(if (sc.compactH) Modifier.heightIn(max = sc.panelMax).verticalScroll(rememberScrollState()) else Modifier))
+        }
         if (ed.referenceVisible) ReferenceWindow(ed)
 
         // panels + scrim
         val panel = ed.panel
         if (panel != null) {
             Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { ed.panel = null } })
-            val top = Modifier.padding(top = 56.dp, start = 12.dp, end = 12.dp)
+            val sc = screen()
+            // phones: panels span the window (centred) and scroll as a whole when the window is short
+            val fit = if (sc.compactH) Modifier.heightIn(max = sc.panelMax).verticalScroll(rememberScrollState()) else Modifier
+            val top = Modifier.padding(top = if (sc.compact) 50.dp else 56.dp, start = 12.dp, end = 12.dp)
+            fun Modifier.place(a: Alignment, inset: Int = 0) = this.align(if (sc.compactW) Alignment.TopCenter else a).padding(start = if (sc.compactW) 0.dp else inset.dp)
             when (panel) {
-                Panel.BRUSHES -> BrushLibraryPanel(ed, top.align(Alignment.TopEnd).width(520.dp))
-                Panel.BRUSH_STUDIO -> BrushStudioPanel(ed, top.align(Alignment.TopCenter).widthIn(max = 940.dp).fillMaxWidth())
-                Panel.LAYERS -> LayersPanel(ed, top.align(Alignment.TopEnd).width(360.dp))
-                Panel.COLOR -> ColorPanel(ed, top.align(Alignment.TopEnd).width(380.dp))
-                Panel.ACTIONS -> ActionsPanel(ed, top.align(Alignment.TopStart).width(470.dp))
-                Panel.ADJUSTMENTS -> AdjustmentsMenu(ed, top.align(Alignment.TopStart).padding(start = 40.dp).width(300.dp))
-                Panel.HISTORY -> HistoryPanel(ed, top.align(Alignment.TopStart).padding(start = 40.dp).width(340.dp))
+                Panel.BRUSHES -> BrushLibraryPanel(ed, top.place(Alignment.TopEnd).width(sc.panel(520.dp)).then(fit))
+                Panel.BRUSH_STUDIO -> BrushStudioPanel(ed, top.align(Alignment.TopCenter).widthIn(max = 940.dp).fillMaxWidth().then(fit))
+                Panel.LAYERS -> LayersPanel(ed, top.place(Alignment.TopEnd).width(sc.panel(360.dp)).then(fit))
+                Panel.COLOR -> ColorPanel(ed, top.place(Alignment.TopEnd).width(sc.panel(380.dp)).then(fit))
+                Panel.ACTIONS -> ActionsPanel(ed, top.place(Alignment.TopStart).width(sc.panel(470.dp)).then(fit))
+                Panel.ADJUSTMENTS -> AdjustmentsMenu(ed, top.place(Alignment.TopStart, 40).width(sc.panel(300.dp)).then(fit))
+                Panel.HISTORY -> HistoryPanel(ed, top.place(Alignment.TopStart, 40).width(sc.panel(340.dp)).then(fit))
             }
         }
 
@@ -198,40 +212,45 @@ private typealias ColorDropCallback = (Float, Float, Int) -> Unit
 
 @Composable
 private fun TopBar(ed: Editor, modifier: Modifier, onExit: () -> Unit, colorDrop: ColorDropCallback) {
+    // Phones: ten equal buttons that share the width; the gallery label becomes an icon and the title is hidden.
+    val sc = screen()
+    val compact = sc.w < 640
+    val b = if (compact) ((sc.w - 12) / 10f).coerceIn(28f, 40f).dp else 40.dp
     Row(
-        modifier.fillMaxWidth().height(50.dp).background(UI.bar).padding(horizontal = 10.dp),
+        modifier.fillMaxWidth().height(if (compact) 46.dp else 50.dp).background(UI.bar).padding(horizontal = if (compact) 6.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(L.t("갤러리"), color = UI.text, fontSize = 15.sp, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onExit).padding(horizontal = 10.dp, vertical = 8.dp))
-        Spacer(Modifier.width(4.dp))
-        IconBtn(Icons.Filled.Build, L.t("동작"), selected = ed.panel == Panel.ACTIONS) { ed.panel = if (ed.panel == Panel.ACTIONS) null else Panel.ACTIONS }
-        IconBtn(Icons.Filled.AutoFixHigh, L.t("조정"), selected = ed.panel == Panel.ADJUSTMENTS || ed.mode == Mode.ADJUST || ed.mode == Mode.LIQUIFY) {
+        if (compact) IconBtn(Icons.Filled.GridView, L.t("갤러리"), size = b) { onExit() }
+        else Text(L.t("갤러리"), color = UI.text, fontSize = 15.sp, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onExit).padding(horizontal = 10.dp, vertical = 8.dp))
+        if (!compact) Spacer(Modifier.width(4.dp))
+        IconBtn(Icons.Filled.Build, L.t("동작"), selected = ed.panel == Panel.ACTIONS, size = b) { ed.panel = if (ed.panel == Panel.ACTIONS) null else Panel.ACTIONS }
+        IconBtn(Icons.Filled.AutoFixHigh, L.t("조정"), selected = ed.panel == Panel.ADJUSTMENTS || ed.mode == Mode.ADJUST || ed.mode == Mode.LIQUIFY, size = b) {
             if (ed.mode == Mode.ADJUST || ed.mode == Mode.LIQUIFY) ed.adjustTool.apply()
             else ed.panel = if (ed.panel == Panel.ADJUSTMENTS) null else Panel.ADJUSTMENTS
         }
-        IconBtn(Icons.Filled.Gesture, L.t("선택"), selected = ed.mode == Mode.SELECT) {
+        IconBtn(Icons.Filled.Gesture, L.t("선택"), selected = ed.mode == Mode.SELECT, size = b) {
             if (ed.mode == Mode.SELECT) ed.exitModes() else ed.selectionTool.begin()
         }
-        IconBtn(Icons.Filled.NearMe, L.t("변형"), selected = ed.mode == Mode.TRANSFORM) {
+        IconBtn(Icons.Filled.NearMe, L.t("변형"), selected = ed.mode == Mode.TRANSFORM, size = b) {
             if (ed.mode == Mode.TRANSFORM) ed.transformTool.commit() else { ed.exitModes(); ed.transformTool.begin() }
         }
         Spacer(Modifier.weight(1f))
-        Text(ed.doc.name, color = UI.text2, fontSize = 12.sp, maxLines = 1, modifier = Modifier.widthIn(max = 200.dp))
+        if (!compact) Text(ed.doc.name, color = UI.text2, fontSize = 12.sp, maxLines = 1, modifier = Modifier.widthIn(max = 200.dp))
         Spacer(Modifier.weight(1f))
-        ToolButton(ed, Tool.BRUSH) { tint, m -> Icon(Icons.Filled.Brush, L.t("페인트"), tint = tint, modifier = m) }
-        ToolButton(ed, Tool.SMUDGE) { tint, m -> Icon(Icons.Filled.TouchApp, L.t("문지르기"), tint = tint, modifier = m) }
-        ToolButton(ed, Tool.ERASER) { tint, m -> EraserIcon(tint, m) }
-        IconBtn(Icons.Filled.Layers, L.t("레이어"), selected = ed.panel == Panel.LAYERS) { ed.panel = if (ed.panel == Panel.LAYERS) null else Panel.LAYERS }
-        Spacer(Modifier.width(6.dp))
-        ColorButton(ed, colorDrop)
+        ToolButton(ed, Tool.BRUSH, b) { tint, m -> Icon(Icons.Filled.Brush, L.t("페인트"), tint = tint, modifier = m) }
+        ToolButton(ed, Tool.SMUDGE, b) { tint, m -> Icon(Icons.Filled.TouchApp, L.t("문지르기"), tint = tint, modifier = m) }
+        ToolButton(ed, Tool.ERASER, b) { tint, m -> EraserIcon(tint, m) }
+        IconBtn(Icons.Filled.Layers, L.t("레이어"), selected = ed.panel == Panel.LAYERS, size = b) { ed.panel = if (ed.panel == Panel.LAYERS) null else Panel.LAYERS }
+        if (!compact) Spacer(Modifier.width(6.dp))
+        Box(Modifier.size(b), contentAlignment = Alignment.Center) { ColorButton(ed, colorDrop, if (compact) b * 0.82f else 34.dp) }
     }
 }
 
 @Composable
-private fun ToolButton(ed: Editor, t: Tool, icon: @Composable (Color, Modifier) -> Unit) {
+private fun ToolButton(ed: Editor, t: Tool, size: androidx.compose.ui.unit.Dp = 40.dp, icon: @Composable (Color, Modifier) -> Unit) {
     val sel = ed.tool == t && ed.mode == Mode.PAINT
     Box(
-        Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(if (sel) UI.accent.copy(alpha = 0.22f) else Color.Transparent)
+        Modifier.size(size).clip(RoundedCornerShape(10.dp)).background(if (sel) UI.accent.copy(alpha = 0.22f) else Color.Transparent)
             .pointerInput(t) {
                 detectTapGestures(
                     onTap = { ed.selectTool(t) },
@@ -239,7 +258,7 @@ private fun ToolButton(ed: Editor, t: Tool, icon: @Composable (Color, Modifier) 
                 )
             },
         contentAlignment = Alignment.Center,
-    ) { icon(if (sel) UI.accent else UI.text, Modifier.size(23.dp)) }
+    ) { icon(if (sel) UI.accent else UI.text, Modifier.size(size * 0.58f)) }
 }
 
 @Composable
@@ -256,12 +275,12 @@ private fun EraserIcon(tint: Color, m: Modifier) {
 }
 
 @Composable
-private fun ColorButton(ed: Editor, colorDrop: ColorDropCallback) {
+private fun ColorButton(ed: Editor, colorDrop: ColorDropCallback, size: androidx.compose.ui.unit.Dp = 34.dp) {
     var origin by remember { mutableStateOf(Offset.Zero) }
     val cb by rememberUpdatedState(colorDrop)
     val slop = with(LocalDensity.current) { 10.dp.toPx() }
     Box(
-        Modifier.size(34.dp).onGloballyPositioned { origin = it.boundsInRoot().topLeft }
+        Modifier.size(size).onGloballyPositioned { origin = it.boundsInRoot().topLeft }
             .clip(CircleShape).background(Color(ed.color)).border(2.dp, Color.White, CircleShape)
             .pointerInput(Unit) {
                 awaitEachGesture {
@@ -291,12 +310,18 @@ private fun Sidebar(ed: Editor, modifier: Modifier) {
     val t = ed.tool
     var showPreview by remember { mutableStateOf<Int>(0) } // 0 none, 1 size, 2 opacity
     val density = LocalDensity.current
-    Box(modifier.padding(horizontal = 6.dp)) {
+    // fit between the top bar and the bottom edge: shorter sliders on phones, undo/redo dropped when very short
+    // (two- and three-finger taps still undo/redo)
+    val sc = screen()
+    val showUndo = sc.h >= 420
+    val fixed = 20 + 12 + 34 + 12 + (if (showUndo) 12 + 96 else 0)
+    val slider = ((sc.h - 46 - 24 - fixed) / 2).coerceIn(60, 170).dp
+    Box(modifier.padding(horizontal = if (sc.compact) 4.dp else 6.dp).padding(top = if (sc.compactH) 46.dp else 0.dp)) {
         Column(
             Modifier.width(48.dp).clip(RoundedCornerShape(14.dp)).background(UI.bar).padding(vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            VerticalSlider(ed.toolSize[t] ?: 0.3f, Modifier.width(40.dp).height(170.dp),
+            VerticalSlider(ed.toolSize[t] ?: 0.3f, Modifier.width(40.dp).height(slider),
                 onStart = { showPreview = 1 }, onEnd = { showPreview = 0; ed.saveToolState() }) { ed.toolSize[t] = it }
             Spacer(Modifier.height(12.dp))
             // Modify button: tap = floating eyedropper, hold = eyedropper while held
@@ -318,11 +343,13 @@ private fun Sidebar(ed: Editor, modifier: Modifier) {
                     },
             )
             Spacer(Modifier.height(12.dp))
-            VerticalSlider(ed.toolOpacity[t] ?: 1f, Modifier.width(40.dp).height(170.dp),
+            VerticalSlider(ed.toolOpacity[t] ?: 1f, Modifier.width(40.dp).height(slider),
                 onStart = { showPreview = 2 }, onEnd = { showPreview = 0; ed.saveToolState() }) { ed.toolOpacity[t] = it }
-            Spacer(Modifier.height(12.dp))
-            RepeatButton(enabled = ed.canUndo, onFire = { ed.undo() }) { tint -> Icon(Icons.AutoMirrored.Filled.Undo, L.t("실행 취소"), tint = tint) }
-            RepeatButton(enabled = ed.canRedo, onFire = { ed.redo() }) { tint -> Icon(Icons.AutoMirrored.Filled.Redo, L.t("다시 실행"), tint = tint) }
+            if (showUndo) {
+                Spacer(Modifier.height(12.dp))
+                RepeatButton(enabled = ed.canUndo, onFire = { ed.undo() }) { tint -> Icon(Icons.AutoMirrored.Filled.Undo, L.t("실행 취소"), tint = tint) }
+                RepeatButton(enabled = ed.canRedo, onFire = { ed.redo() }) { tint -> Icon(Icons.AutoMirrored.Filled.Redo, L.t("다시 실행"), tint = tint) }
+            }
         }
         if (showPreview != 0) {
             val dx = with(density) { (if (ed.prefs.rightHanded) -164 else 54).dp.roundToPx() }

@@ -1,5 +1,6 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.ui.common.screen
 import com.prosketch.app.L
 
 import androidx.compose.foundation.Canvas
@@ -124,14 +125,14 @@ fun ColorPanel(ed: Editor, modifier: Modifier = Modifier) {
         if (tab != 4) {
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(L.t("최근"), color = UI.text2, fontSize = 11.sp, modifier = Modifier.width(34.dp))
+                Text(L.t("최근"), color = UI.text2, fontSize = 11.sp, modifier = Modifier.width(46.dp), maxLines = 1)
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     ed.recentColors.take(10).forEach { c -> ColorDot(Color(c), 24.dp) { ed.setColor(c) } }
                 }
             }
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(ed.palettes.active.name, color = UI.text2, fontSize = 11.sp, modifier = Modifier.width(34.dp), maxLines = 1)
+                Text(ed.palettes.active.name, color = UI.text2, fontSize = 11.sp, modifier = Modifier.width(46.dp), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     ed.palettes.active.colors.take(20).forEach { c -> ColorDot(Color(c), 24.dp) { ed.setColor(c) } }
                 }
@@ -361,7 +362,7 @@ private fun PalettesView(ed: Editor) {
             com.prosketch.app.data.Exporter.share(ctx, f, "application/zip")
         }
     }
-    Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+    Column(Modifier.heightIn(max = screen().body(420.dp, 150.dp)).verticalScroll(rememberScrollState())) {
         refresh.let { }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(L.t("팔레트"), color = UI.text, fontSize = 15.sp, modifier = Modifier.weight(1f))

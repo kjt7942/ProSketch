@@ -1,5 +1,6 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.ui.common.screen
 import com.prosketch.app.L
 
 import android.graphics.Bitmap
@@ -14,6 +15,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -102,6 +104,20 @@ fun BottomBar(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Box(modifier.clip(RoundedCornerShape(16.dp)).background(UI.panel).pointerInput(Unit) { awaitEachGesture { awaitFirstDown() } }.padding(10.dp)) { content() }
 }
 
+/**
+ * A bar row whose tools scroll sideways while the closing buttons ([end]) stay in view;
+ * on a phone they would otherwise sit off-screen at the end of the scroll.
+ */
+@Composable
+fun ToolRow(end: @Composable RowScope.() -> Unit, content: @Composable RowScope.() -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { content() }
+        Spacer(Modifier.width(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { end() }
+    }
+}
+
 // ---------------------------------------------------------------- Selection
 @Composable
 fun SelectionBar(ed: Editor, modifier: Modifier = Modifier) {
@@ -111,14 +127,14 @@ fun SelectionBar(ed: Editor, modifier: Modifier = Modifier) {
     BottomBar(modifier) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (feather) {
-                Row(Modifier.width(420.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.widthIn(max = 420.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     var f by remember { mutableFloatStateOf(0f) }
                     Box(Modifier.weight(1f)) { LabeledSlider(L.t("페더"), f, 0f..100f, "${f.roundToInt()}%", { f = it }) }
                     TextBtn(L.t("적용")) { st.applyFeather(f / 100f * max(ed.doc.width, ed.doc.height) * 0.05f); feather = false }
                 }
                 Spacer(Modifier.height(6.dp))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            ToolRow(end = { TextBtn(L.t("완료"), true) { ed.exitModes() } }) {
                 Segmented(SelectionMode.entries.map { it.label }, st.mode.ordinal, Modifier.width(300.dp)) { st.finish(); st.mode = SelectionMode.entries[it] }
                 Spacer(Modifier.width(6.dp))
                 TextBtn(L.t("추가"), st.op == SelectionOp.ADD) { st.op = SelectionOp.ADD }
@@ -136,7 +152,6 @@ fun SelectionBar(ed: Editor, modifier: Modifier = Modifier) {
                 }
                 TextBtn(L.t("색상 채우기"), st.colorFill) { st.colorFill = !st.colorFill }
                 TextBtn(L.t("지우기")) { st.clear() }
-                TextBtn(L.t("완료"), true) { ed.exitModes() }
             }
             if (st.mode == SelectionMode.FREEHAND) Text(L.t("드래그하여 올가미 · 탭하여 다각형 점 추가 · 시작점을 탭하여 닫기"), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
             if (st.mode == SelectionMode.AUTOMATIC) Text(L.tf("탭하여 선택 · 누른 채 좌우로 밀어 임계값 {0}%", (st.autoThreshold * 100).roundToInt()), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
@@ -153,7 +168,7 @@ fun TransformBar(ed: Editor, modifier: Modifier = Modifier) {
     var numeric by remember { mutableStateOf(false) }
     if (numeric) TransformNumbers(ed) { numeric = false }
     BottomBar(modifier) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
+        ToolRow(end = { TextBtn(L.t("취소")) { tt.cancel() }; TextBtn(L.t("완료"), true) { tt.commit() } }) {
             TextBtn(L.t("자석"), s.magnetics) { s.magnetics = !s.magnetics; tt.changed() }
             Segmented(TransformMode.entries.map { it.label }, s.mode.ordinal, Modifier.width(320.dp)) { tt.setMode(TransformMode.entries[it]) }
             TextBtn(L.t("수평 뒤집기")) { tt.flipH() }
@@ -163,8 +178,6 @@ fun TransformBar(ed: Editor, modifier: Modifier = Modifier) {
             TextBtn(L.t("화면에 맞추기")) { tt.fitToScreen() }
             TextBtn(L.tf("보간: {0}", s.interpolation.label)) { s.interpolation = Interpolation.entries[(s.interpolation.ordinal + 1) % Interpolation.entries.size]; tt.changed() }
             TextBtn(L.t("초기화")) { tt.reset() }
-            TextBtn(L.t("취소")) { tt.cancel() }
-            TextBtn(L.t("완료"), true) { tt.commit() }
         }
     }
 }
@@ -184,7 +197,7 @@ fun AdjustmentsMenu(ed: Editor, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Modifier.androidxScroll(): Modifier = this.then(Modifier.height(560.dp)).then(Modifier.verticalScrollCompat())
+private fun Modifier.androidxScroll(): Modifier = this.then(Modifier.height(screen().body(560.dp, 60.dp))).then(Modifier.verticalScrollCompat())
 
 @Composable
 private fun Modifier.verticalScrollCompat(): Modifier = this.verticalScroll(rememberScrollState())
@@ -198,9 +211,9 @@ fun AdjustBar(ed: Editor, modifier: Modifier = Modifier) {
     if (t == AdjustmentType.RECOLOR) LaunchedEffect(ed.color) { at.colorChanged() }
     BottomBar(modifier.widthIn(max = 760.dp)) {
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(t.label, color = UI.text, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                if (at.computing) Text(L.t("계산 중…"), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
+            val narrow = screen().compactW
+            @Composable
+            fun tools() {
                 if (t.supportsPencil) {
                     Segmented(listOf(L.t("레이어"), L.t("펜슬")), if (at.pencil) 1 else 0, Modifier.width(150.dp)) { at.pencil = it == 1; ed.invalidate() }
                     Spacer(Modifier.width(6.dp))
@@ -216,11 +229,16 @@ fun AdjustBar(ed: Editor, modifier: Modifier = Modifier) {
                     }.padding(horizontal = 12.dp, vertical = 8.dp)) { Text(L.t("원본"), color = UI.text, fontSize = 13.sp) }
                 Spacer(Modifier.width(6.dp))
                 TextBtn(L.t("초기화")) { at.reset() }
-                Spacer(Modifier.width(6.dp))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(t.label, color = UI.text, fontSize = 15.sp, maxLines = 1, modifier = Modifier.weight(1f))
+                if (at.computing) Text(L.t("계산 중…"), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp))
+                if (!narrow) { tools(); Spacer(Modifier.width(6.dp)) }
                 TextBtn(L.t("취소")) { at.cancel() }
                 Spacer(Modifier.width(6.dp))
                 TextBtn(L.t("적용"), true) { at.apply() }
             }
+            if (narrow) Row(Modifier.padding(top = 6.dp).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) { tools() }
             when (t) {
                 AdjustmentType.CURVES -> CurvesEditor(ed)
                 AdjustmentType.COLOR_BALANCE -> {
@@ -611,15 +629,13 @@ fun ShapeBar(ed: Editor, modifier: Modifier = Modifier) {
     t.version.let { }
     BottomBar(modifier) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            ToolRow(end = { TextBtn(L.t("취소"), enabled = t.hasItem()) { t.cancel() }; TextBtn(L.t("완료"), true) { ed.exitModes() } }) {
                 Segmented(ShapeKind.entries.map { it.label }, t.kind.ordinal, Modifier.width(380.dp)) { t.kind = ShapeKind.entries[it]; t.changed() }
                 if (t.kind != ShapeKind.LINE) Segmented(ShapeStyle.entries.map { it.label }, t.style.ordinal, Modifier.width(260.dp)) { t.style = ShapeStyle.entries[it]; t.changed() }
                 TextBtn(L.t("비율 고정"), t.constrain) { t.constrain = !t.constrain; t.changed() }
                 if (t.kind != ShapeKind.LINE) TextBtn(L.t("중심에서"), t.fromCenter) { t.fromCenter = !t.fromCenter; t.changed() }
-                TextBtn(L.t("취소"), enabled = t.hasItem()) { t.cancel() }
-                TextBtn(L.t("완료"), true) { ed.exitModes() }
             }
-            Row(Modifier.width(640.dp).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (t.kind == ShapeKind.LINE || t.style != ShapeStyle.FILL) Box(Modifier.weight(1f)) {
                     LabeledSlider(L.t("선 두께"), t.width, 0.001f..0.1f, "${t.strokePx().roundToInt()}px", { t.width = it; t.changed() })
                 }
@@ -645,14 +661,12 @@ fun GradientBar(ed: Editor, modifier: Modifier = Modifier) {
     t.version.let { }
     BottomBar(modifier) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            ToolRow(end = { TextBtn(L.t("취소"), enabled = t.hasItem()) { t.cancel() }; TextBtn(L.t("완료"), true) { ed.exitModes() } }) {
                 Segmented(GradientKind.entries.map { it.label }, t.kind.ordinal, Modifier.width(180.dp)) { t.kind = GradientKind.entries[it]; t.changed() }
                 Segmented(listOf(L.t("이전 색상까지"), L.t("투명까지")), if (t.toTransparent) 1 else 0, Modifier.width(320.dp)) { t.toTransparent = it == 1; t.changed() }
                 TextBtn(L.t("반전")) { t.reversed = !t.reversed; t.changed() }
-                TextBtn(L.t("취소"), enabled = t.hasItem()) { t.cancel() }
-                TextBtn(L.t("완료"), true) { ed.exitModes() }
             }
-            Box(Modifier.width(420.dp).padding(top = 4.dp)) {
+            Box(Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(top = 4.dp)) {
                 LabeledSlider(L.t("불투명도"), t.opacity, 0f..1f, "${(t.opacity * 100).roundToInt()}%", { t.opacity = it; t.changed() })
             }
             Text(L.t("드래그하여 시작점과 끝점 지정 · 점을 끌어 조절 · 다른 곳을 터치하면 확정"), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))

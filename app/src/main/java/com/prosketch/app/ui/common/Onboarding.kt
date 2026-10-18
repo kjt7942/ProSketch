@@ -83,7 +83,7 @@ fun OnboardingDialog(onDone: () -> Unit) {
     Dialog(onDone, DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Color(0xF0101012)), contentAlignment = Alignment.Center) {
             Column(Modifier.widthIn(max = 760.dp).fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                HorizontalPager(state, Modifier.fillMaxWidth().height(520.dp)) { i ->
+                HorizontalPager(state, Modifier.fillMaxWidth().height(screen().body(520.dp, 150.dp))) { i ->
                     val p = pages[i]
                     Column(Modifier.fillMaxSize().clip(RoundedCornerShape(24.dp)).background(UI.panel).padding(32.dp)) {
                         Box(Modifier.size(64.dp).clip(CircleShape).background(UI.accent), contentAlignment = Alignment.Center) {
@@ -94,7 +94,7 @@ fun OnboardingDialog(onDone: () -> Unit) {
                         Spacer(Modifier.height(18.dp))
                         p.items.forEach { (k, v) ->
                             Row(Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
-                                Text(k, color = UI.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(250.dp))
+                                Text(k, color = UI.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(if (screen().compactW) 110.dp else 250.dp))
                                 Text(v, color = UI.text2, fontSize = 15.sp)
                             }
                         }

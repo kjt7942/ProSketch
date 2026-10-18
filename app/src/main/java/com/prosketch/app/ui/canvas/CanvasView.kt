@@ -81,11 +81,18 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
     }
 
     private fun fitMatrix(): Matrix {
-        val margin = 24f * density
-        val s = min((width - 2 * margin) / doc.width, (height - 2 * margin) / doc.height).coerceAtLeast(0.01f)
+        // keep clear of the top bar and the sidebar, which matter on phones where they cover much of the canvas
+        val margin = 12f * density
+        val top = if (editor.fullscreen) 0f else 50f * density
+        val side = if (editor.fullscreen) 0f else 56f * density
+        val l = margin + (if (editor.prefs.rightHanded) 0f else side)
+        val r = width - margin - (if (editor.prefs.rightHanded) side else 0f)
+        val t = top + margin
+        val b = height - margin
+        val s = min((r - l) / doc.width, (b - t) / doc.height).coerceAtLeast(0.01f)
         return Matrix().apply {
             setScale(s, s)
-            postTranslate((width - doc.width * s) / 2f, (height - doc.height * s) / 2f)
+            postTranslate(l + ((r - l) - doc.width * s) / 2f, t + ((b - t) - doc.height * s) / 2f)
         }
     }
 
@@ -136,6 +143,9 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (!fitted && w > 0) { viewMatrix.set(fitMatrix()); fitted = true }
+        // turned between portrait and landscape, or a foldable opened/closed (width changes a lot): fit again.
+        // Smaller resizes (split-screen nudges, the keyboard changing the height) keep the view.
+        else if (oldw > 0 && ((w > h) != (oldw > oldh) || kotlin.math.abs(w - oldw) > oldw * 0.3f)) viewMatrix.set(fitMatrix())
         else if (oldw > 0) { viewMatrix.postTranslate((w - oldw) / 2f, (h - oldh) / 2f) }
     }
 

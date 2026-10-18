@@ -1,5 +1,6 @@
 package com.prosketch.app.ui.editor
 
+import com.prosketch.app.ui.common.screen
 import com.prosketch.app.L
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -119,7 +120,7 @@ fun LayersPanel(ed: Editor, modifier: Modifier = Modifier) {
         val rowAbove = others.getOrNull(target - 1)
         val dropDepth = if (d == null) 0 else (ed.gapDepth(rowAbove) - outdent).coerceAtLeast(0)
 
-        Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState())) {
+        Column(Modifier.heightIn(max = screen().body(560.dp, 70.dp)).verticalScroll(rememberScrollState())) {
             Box(Modifier.fillMaxWidth().height(with(density) { (rows.size * stepPx).toDp() })) {
                 fun slotOf(l: Layer): Float = when {
                     d == null -> rows.indexOf(l) * stepPx
