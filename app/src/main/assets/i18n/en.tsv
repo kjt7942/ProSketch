@@ -890,3 +890,7 @@ Swatches.json이 없습니다	Swatches.json is missing
 중심 X	Centre X
 중심 Y	Centre Y
 회전 (°)	Rotation (°)
+격자	Grid
+자석 켬: 격자·가장자리·중앙에 맞춥니다	Magnet on: snaps to the grid, edges and centre
+자석 끔	Magnet off
+격자 간격	Grid spacing

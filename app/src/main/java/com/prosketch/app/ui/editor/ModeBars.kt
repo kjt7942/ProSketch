@@ -632,6 +632,7 @@ fun ShapeBar(ed: Editor, modifier: Modifier = Modifier) {
             ToolRow(end = { TextBtn(L.t("취소"), enabled = t.hasItem()) { t.cancel() }; TextBtn(L.t("완료"), true) { ed.exitModes() } }) {
                 Segmented(ShapeKind.entries.map { it.label }, t.kind.ordinal, Modifier.width(380.dp)) { t.kind = ShapeKind.entries[it]; t.changed() }
                 if (t.kind != ShapeKind.LINE) Segmented(ShapeStyle.entries.map { it.label }, t.style.ordinal, Modifier.width(260.dp)) { t.style = ShapeStyle.entries[it]; t.changed() }
+                SnapButtons(t)
                 TextBtn(L.t("비율 고정"), t.constrain) { t.constrain = !t.constrain; t.changed() }
                 if (t.kind != ShapeKind.LINE) TextBtn(L.t("중심에서"), t.fromCenter) { t.fromCenter = !t.fromCenter; t.changed() }
             }
@@ -645,6 +646,7 @@ fun ShapeBar(ed: Editor, modifier: Modifier = Modifier) {
                 if (t.kind == ShapeKind.POLYGON || t.kind == ShapeKind.STAR) Box(Modifier.weight(1f)) {
                     LabeledSlider(L.t("꼭짓점"), t.sides.toFloat(), 3f..12f, "${t.sides}", { t.sides = it.roundToInt(); t.changed() })
                 }
+                if (t.gridOn) Box(Modifier.weight(1f)) { GridSizeSlider(ed, t) }
             }
             Text(
                 if (t.style == ShapeStyle.BOTH && t.kind != ShapeKind.LINE) L.t("드래그하여 그리기 · 점을 끌어 크기 조절 · 안쪽을 끌어 이동 · 바깥을 터치하면 확정 · 채우기는 이전 색상")
@@ -665,10 +667,12 @@ fun GradientBar(ed: Editor, modifier: Modifier = Modifier) {
                 Segmented(GradientKind.entries.map { it.label }, t.kind.ordinal, Modifier.width(180.dp)) { t.kind = GradientKind.entries[it]; t.changed() }
                 Segmented(listOf(L.t("이전 색상까지"), L.t("투명까지")), if (t.toTransparent) 1 else 0, Modifier.width(320.dp)) { t.toTransparent = it == 1; t.changed() }
                 TextBtn(L.t("반전")) { t.reversed = !t.reversed; t.changed() }
+                SnapButtons(t)
             }
             Box(Modifier.widthIn(max = 420.dp).fillMaxWidth().padding(top = 4.dp)) {
                 LabeledSlider(L.t("불투명도"), t.opacity, 0f..1f, "${(t.opacity * 100).roundToInt()}%", { t.opacity = it; t.changed() })
             }
+            if (t.gridOn) Box(Modifier.widthIn(max = 420.dp).fillMaxWidth()) { GridSizeSlider(ed, t) }
             Text(L.t("드래그하여 시작점과 끝점 지정 · 점을 끌어 조절 · 다른 곳을 터치하면 확정"), color = UI.text2, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
         }
     }
@@ -717,5 +721,20 @@ private fun TransformNumbers(ed: Editor, onDone: () -> Unit) {
             }) { Text(L.t("적용")) }
         },
         dismissButton = { androidx.compose.material3.TextButton(onDone) { Text(L.t("취소")) } })
+}
+
+/** Grid guide and magnet toggles shared by the shape and gradient bars. */
+@Composable
+private fun SnapButtons(t: PlacementTool) {
+    t.version.let { }
+    TextBtn(L.t("격자"), t.gridOn) { t.setGrid(!t.gridOn) }
+    TextBtn(L.t("자석"), t.magnet) { t.magnet = !t.magnet; t.ed().hud(if (t.magnet) L.t("자석 켬: 격자·가장자리·중앙에 맞춥니다") else L.t("자석 끔")) }
+}
+
+/** Spacing of the 2D grid guide, in canvas pixels. */
+@Composable
+private fun GridSizeSlider(ed: Editor, t: PlacementTool) {
+    val g = ed.doc.guides
+    LabeledSlider(L.t("격자 간격"), g.gridSize, 16f..400f, "${g.gridSize.roundToInt()}px", { g.gridSize = it; ed.bump(); t.changed() })
 }
 

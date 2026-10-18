@@ -69,15 +69,79 @@ abstract class PlacementTool(protected val ed: Editor) {
 
     fun hasItem() = a != null && b != null
 
-    fun setPoints(p: PointF, q: PointF) { a = p; b = q; changed() }
-    fun moveA(p: PointF) { a = p; changed() }
-    fun moveB(p: PointF) { b = p; changed() }
-    fun moveBy(dx: Float, dy: Float) {
-        val p = a ?: return; val q = b ?: return
-        a = PointF(p.x + dx, p.y + dy); b = PointF(q.x + dx, q.y + dy); changed()
+    // ---- magnet: control points snap to the 2D grid guide, the canvas edges and its centre lines
+    /** On/off, remembered across sessions and shared by the shape and gradient tools. */
+    var magnet: Boolean
+        get() = magnetState
+        set(v) { magnetState = v; ed.prefs.shapeMagnet = v; version++ }
+    private var magnetState by mutableStateOf(ed.prefs.shapeMagnet)
+    /** Snap distance in document pixels; the canvas sets it from a fixed screen distance and the zoom. */
+    var snapRadius = 20f
+    /** Whether each control point is currently held by the magnet (drawn green). */
+    var snappedA = false
+        private set
+    var snappedB = false
+        private set
+
+    /** The 2D grid guide is shown: the magnet snaps to its lines. */
+    val gridOn get() = ed.doc.guides.enabled && ed.doc.guides.type == com.prosketch.app.engine.GuideType.GRID
+
+    fun setGrid(on: Boolean) {
+        val g = ed.doc.guides
+        if (on) { g.type = com.prosketch.app.engine.GuideType.GRID; g.enabled = true } else g.enabled = false
+        ed.bump(); changed()
+    }
+
+    fun snap(p: PointF): Pair<PointF, Boolean> {
+        if (!magnet) return p to false
+        val r = snapRadius
+        var x = p.x; var y = p.y
+        var hit = false
+        val g = ed.doc.guides
+        if (gridOn) {
+            // work in the grid's own (rotated) frame, snapping each axis to its nearest line
+            val cx = g.centerX(ed.doc.width); val cy = g.centerY(ed.doc.height)
+            val rot = Math.toRadians(g.rotationDeg.toDouble()).toFloat()
+            val c = cos(rot); val s = sin(rot)
+            val dx = x - cx; val dy = y - cy
+            var gx = dx * c + dy * s
+            var gy = -dx * s + dy * c
+            val step = g.gridSize.coerceAtLeast(8f)
+            val nx = Math.round(gx / step) * step; if (abs(nx - gx) <= r) { gx = nx; hit = true }
+            val ny = Math.round(gy / step) * step; if (abs(ny - gy) <= r) { gy = ny; hit = true }
+            x = cx + gx * c - gy * s
+            y = cy + gx * s + gy * c
+        }
+        val w = ed.doc.width.toFloat(); val h = ed.doc.height.toFloat()
+        for (v in floatArrayOf(0f, w / 2f, w)) if (abs(x - v) <= r) { x = v; hit = true; break }
+        for (v in floatArrayOf(0f, h / 2f, h)) if (abs(y - v) <= r) { y = v; hit = true; break }
+        return PointF(x, y) to hit
+    }
+
+    fun setPoints(p: PointF, q: PointF) {
+        val (sp, hp) = snap(p); val (sq, hq) = snap(q)
+        a = sp; b = sq; snappedA = hp; snappedB = hq; changed()
+    }
+    fun moveA(p: PointF) { val (s, h) = snap(p); a = s; snappedA = h; changed() }
+    fun moveB(p: PointF) { val (s, h) = snap(p); b = s; snappedB = h; changed() }
+
+    private var moveFromA: PointF? = null
+    private var moveFromB: PointF? = null
+    /** Start of a whole-item drag: offsets are measured from here so a snapped item can be pulled free again. */
+    fun beginMove() { moveFromA = a?.let { PointF(it.x, it.y) }; moveFromB = b?.let { PointF(it.x, it.y) } }
+    /** Whole-item drag by the total offset since [beginMove]; the first point leads the snapping. */
+    fun moveTotal(dx: Float, dy: Float) {
+        val p = moveFromA ?: return; val q = moveFromB ?: return
+        val raw = PointF(p.x + dx, p.y + dy)
+        val (s, h) = snap(raw)
+        val ox = s.x - raw.x; val oy = s.y - raw.y
+        a = s; b = PointF(q.x + dx + ox, q.y + dy + oy)
+        snappedA = h; snappedB = false
+        changed()
     }
 
     fun changed() { version++; ed.invalidate() }
+    fun ed(): Editor = ed
 
     /** Replaces the layer's drawing while editing: layer + item composited exactly as on commit. */
     fun drawLive(canvas: Canvas, l: Layer, paint: Paint?): Boolean {

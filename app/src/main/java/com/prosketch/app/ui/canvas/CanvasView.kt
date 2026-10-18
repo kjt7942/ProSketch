@@ -393,11 +393,11 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
                 linePaint.pathEffect = null
             }
             Mode.TRANSFORM -> drawTransform(canvas)
-            Mode.SHAPE -> drawPlacement(canvas, editor.shapeTool.handlePoints(), false)
+            Mode.SHAPE -> editor.shapeTool.let { drawPlacement(canvas, it.handlePoints(), false, it.snappedA, it.snappedB) }
             Mode.GRADIENT -> {
                 val t = editor.gradientTool
                 val p = t.a; val q = t.b
-                if (p != null && q != null) drawPlacement(canvas, listOf(p, q), true)
+                if (p != null && q != null) drawPlacement(canvas, listOf(p, q), true, t.snappedA, t.snappedB)
             }
             Mode.ADJUST -> drawAdjustOverlay(canvas)
             Mode.LIQUIFY -> {
@@ -1110,12 +1110,13 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
 
     private fun placeDown(t: com.prosketch.app.ui.editor.PlacementTool, x: Float, y: Float, d: PointF) {
         phStartX = x; phStartY = y
+        t.snapRadius = 14f * density / scale   // same feel at every zoom
         val pts = if (t is com.prosketch.app.ui.editor.ShapeTool) t.handlePoints() else listOfNotNull(t.a, t.b)
         val r = 30f * density
         phHit = 0
         pts.forEachIndexed { i, p -> val s = toScreen(p.x, p.y); if (phHit == 0 && hypot(s.x - x, s.y - y) < r) phHit = i + 1 }
         if (phHit == 0 && t is com.prosketch.app.ui.editor.ShapeTool && t.hasItem()) {
-            val b = t.bounds(); if (b.contains(d.x, d.y)) phHit = 3
+            val b = t.bounds(); if (b.contains(d.x, d.y)) { phHit = 3; t.beginMove() }
         }
         if (phHit == 0) {
             if (t.hasItem()) t.commit()
@@ -1128,7 +1129,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
         when (phHit) {
             1 -> t.moveA(PointF(d.x, d.y))
             2, 4 -> t.moveB(PointF(d.x, d.y))
-            3 -> t.moveBy(d.x - prevD.x, d.y - prevD.y)
+            3 -> { val o = toDoc(phStartX, phStartY); t.moveTotal(d.x - o.x, d.y - o.y) }
         }
     }
 
@@ -1138,7 +1139,7 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
         phHit = 0
     }
 
-    private fun drawPlacement(canvas: Canvas, pts: List<PointF>, line: Boolean) {
+    private fun drawPlacement(canvas: Canvas, pts: List<PointF>, line: Boolean, snapA: Boolean = false, snapB: Boolean = false) {
         if (pts.size < 2) return
         val s0 = toScreen(pts[0].x, pts[0].y); val s1 = toScreen(pts[1].x, pts[1].y)
         if (line) {
@@ -1147,8 +1148,9 @@ class CanvasView(context: Context, val editor: Editor) : View(context) {
             canvas.drawLine(s0.x, s0.y, s1.x, s1.y, linePaint)
             linePaint.pathEffect = null
         }
-        handle(canvas, s0.x, s0.y, accent)
-        handle(canvas, s1.x, s1.y, accent)
+        val green = 0xFF30C46C.toInt()   // held by the magnet
+        handle(canvas, s0.x, s0.y, if (snapA) green else accent)
+        handle(canvas, s1.x, s1.y, if (snapB) green else accent)
     }
 
     private fun toolDown(x: Float, y: Float, pressure: Float) {

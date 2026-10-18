@@ -37,6 +37,7 @@ class Prefs(ctx: Context) {
     var threeSwipeMenu: Boolean get() = b("threeSwipeMenu", true); set(v) = put { putBoolean("threeSwipeMenu", v) }
     var fourTapFullscreen: Boolean get() = b("fourTapFullscreen", true); set(v) = put { putBoolean("fourTapFullscreen", v) }
     var quickShape: Boolean get() = b("quickShape", true); set(v) = put { putBoolean("quickShape", v) }
+    var shapeMagnet: Boolean get() = b("shapeMagnet", true); set(v) = put { putBoolean("shapeMagnet", v) }
     var quickShapeDelay: Float get() = f("quickShapeDelay", 0.55f); set(v) = put { putFloat("quickShapeDelay", v) }
     var rapidUndoDelay: Float get() = f("rapidUndoDelay", 0.65f); set(v) = put { putFloat("rapidUndoDelay", v) }
     var rotateWithPinch: Boolean get() = b("rotateWithPinch", true); set(v) = put { putBoolean("rotateWithPinch", v) }
